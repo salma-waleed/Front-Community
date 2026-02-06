@@ -13,6 +13,9 @@ import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 import EmailVerificationPage from "./pages/auth/EmailVerificationPage";
 
+// Profile Pages
+import AdminProfilePage from "./pages/profile/AdminProfilePage";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -30,6 +33,9 @@ const App = () => (
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/verify-email" element={<EmailVerificationPage />} />
+
+          {/* Admin Routes */}
+          <Route path="/admin/profile" element={<AdminProfilePage />} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>
