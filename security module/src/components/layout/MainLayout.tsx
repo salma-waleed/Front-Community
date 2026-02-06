@@ -27,7 +27,7 @@ interface MainLayoutProps {
 }
 
 const navigation = [
-  { name: "Home", href: "/", icon: Home },
+  // { name: "Home", href: "/", icon: Home },
   // { name: "Courses", href: "/courses", icon: BookOpen },
   // { name: "My Learning", href: "/dashboard", icon: GraduationCap },
   // { name: "Messages", href: "/messages", icon: MessageSquare },
@@ -48,133 +48,127 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-        <div className="container flex h-16 items-center justify-between gap-4">
-          {/* Logo */}
-          <Link to="/" className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-              <GraduationCap className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="hidden font-display text-xl font-bold sm:inline-block">
-              EduPlatform
-            </span>
-          </Link>
-
-          {/* Desktop Navigation */}
-          <nav className="hidden items-center gap-1 md:flex">
+      {/* Header */}{" "}
+      <header className="sticky top-0 z-50 border-b-4 border-indigo-200 bg-white/95 backdrop-blur-xl supports-[backdrop-filter]:bg-white/60 shadow-2xl shadow-indigo-200/50">
+        {" "}
+        <div className="container mx-auto px-4 flex h-20 items-center justify-between gap-4">
+          {" "}
+          {/* Logo */}{" "}
+          <Link to="/" className="flex items-center gap-3">
+            {" "}
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-pink-400 via-purple-400 to-indigo-500 shadow-2xl ring-4 ring-white/70 drop-shadow-lg">
+              {" "}
+              <GraduationCap className="h-7 w-7 text-white drop-shadow-md" />{" "}
+            </div>{" "}
+            <span className="hidden font-display text-2xl font-extrabold tracking-wide text-transparent bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 bg-clip-text sm:inline-block">
+              {" "}
+              EduPlatform{" "}
+            </span>{" "}
+          </Link>{" "}
+          {/* Desktop Navigation */}{" "}
+          <nav className="hidden items-center gap-2 md:flex">
+            {" "}
             {navigation.map((item) => (
               <Link
                 key={item.name}
                 to={item.href}
                 className={cn(
-                  "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground",
+                  "flex items-center gap-2 rounded-2xl px-4 py-3 text-base font-extrabold tracking-wide transition-all hover:bg-gradient-to-r hover:from-indigo-200 hover:to-pink-200 hover:shadow-lg hover:scale-105",
                   location.pathname === item.href
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground",
+                    ? "bg-gradient-to-r from-indigo-300 to-pink-300 shadow-xl ring-2 ring-indigo-200/50 scale-105"
+                    : "text-indigo-700 hover:text-indigo-900",
                 )}
               >
-                <item.icon className="h-4 w-4" />
-                {item.name}
+                {" "}
+                <item.icon className="h-5 w-5 drop-shadow-sm" />{" "}
+                {item.name}{" "}
               </Link>
-            ))}
-          </nav>
-
-          {/* Search Bar */}
-          <div className="hidden flex-1 max-w-md lg:block">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search courses..."
-                className="pl-9 bg-muted/50"
-              />
-            </div>
-          </div>
-
-          {/* Right Actions */}
-          <div className="flex items-center gap-2">
-            {/* Mobile Search Toggle */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="lg:hidden"
-              onClick={() => setSearchOpen(!searchOpen)}
-            >
-              <Search className="h-5 w-5" />
-            </Button>
-
-            {/* Notifications */}
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="h-5 w-5" />
-              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-accent-foreground">
-                3
-              </span>
-            </Button>
-
-            {/* Cart */}
-            <Link to="/cart">
-              <Button variant="ghost" size="icon" className="relative">
-                <ShoppingCart className="h-5 w-5" />
-                {items.length > 0 && (
-                  <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-accent-foreground">
-                    {items.length}
-                  </span>
-                )}
-              </Button>
-            </Link>
-
-            {/* User Menu */}
+            ))}{" "}
+          </nav>{" "}
+          {/* Right Actions */}{" "}
+          <div className="flex items-center gap-3">
+            {" "}
+            {/* User Menu */}{" "}
             {user ? (
               <div className="flex items-center gap-2">
+                {" "}
                 <Link to="/profile">
-                  <Button variant="ghost" size="icon">
-                    <User className="h-5 w-5" />
-                  </Button>
-                </Link>
-                <Button variant="ghost" size="icon" onClick={handleLogout}>
-                  <LogOut className="h-5 w-5" />
-                </Button>
+                  {" "}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl hover:scale-110 transition-all bg-gradient-to-br from-indigo-200 to-pink-200 hover:from-indigo-300 hover:to-pink-300"
+                  >
+                    {" "}
+                    <User className="h-7 w-7 text-indigo-700 drop-shadow-sm" />{" "}
+                  </Button>{" "}
+                </Link>{" "}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl hover:scale-110 transition-all bg-gradient-to-br from-pink-200 to-red-200 hover:from-pink-300 hover:to-red-300"
+                  onClick={handleLogout}
+                >
+                  {" "}
+                  <LogOut className="h-7 w-7 text-pink-700 drop-shadow-sm" />{" "}
+                </Button>{" "}
               </div>
             ) : (
-              <div className="hidden items-center gap-2 sm:flex">
+              <div className="hidden items-center gap-3 sm:flex">
+                {" "}
                 <Link to="/login">
-                  <Button variant="ghost">Log in</Button>
-                </Link>
+                  {" "}
+                  <Button
+                    variant="outline"
+                    className="px-6 py-3 rounded-2xl text-lg font-extrabold tracking-wide shadow-lg hover:shadow-xl hover:scale-105 transition-all hover:bg-gradient-to-r hover:from-indigo-500 hover:to-purple-500 border-2 border-indigo-300"
+                  >
+                    {" "}
+                    Log in{" "}
+                  </Button>{" "}
+                </Link>{" "}
                 <Link to="/register">
-                  <Button>Sign up</Button>
-                </Link>
+                  {" "}
+                  <Button className="px-8 py-3 rounded-2xl text-lg font-extrabold tracking-wide shadow-2xl hover:shadow-3xl hover:scale-105 transition-all bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 hover:from-pink-600 hover:via-purple-600 hover:to-indigo-600">
+                    {" "}
+                    Sign up{" "}
+                  </Button>{" "}
+                </Link>{" "}
               </div>
-            )}
-
-            {/* Mobile Menu Toggle */}
+            )}{" "}
+            {/* Mobile Menu Toggle */}{" "}
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden"
+              className="h-14 w-14 rounded-full md:hidden shadow-lg hover:shadow-xl hover:scale-110 transition-all bg-gradient-to-br from-yellow-200 to-pink-200 hover:from-yellow-300 hover:to-pink-300"
               onClick={() => setMobileMenuOpen(true)}
             >
-              <Menu className="h-5 w-5" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Mobile Search */}
+              {" "}
+              <Menu className="h-7 w-7 text-yellow-700" />{" "}
+            </Button>{" "}
+          </div>{" "}
+        </div>{" "}
+        {/* Mobile Search */}{" "}
         <AnimatePresence>
+          {" "}
           {searchOpen && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="border-t border-border lg:hidden"
+              className="border-t-2 border-indigo-200 lg:hidden bg-gradient-to-r from-indigo-50 to-pink-50"
             >
-              <div className="container py-3">
-                <Input placeholder="Search courses..." />
-              </div>
+              {" "}
+              <div className="container py-6 px-4">
+                {" "}
+                <Input
+                  placeholder="Search fun courses..."
+                  className="pl-12 py-6 text-lg rounded-2xl border-2 border-indigo-200 bg-gradient-to-r from-white to-indigo-50 shadow-inner focus:shadow-xl transition-all"
+                />{" "}
+              </div>{" "}
             </motion.div>
-          )}
-        </AnimatePresence>
+          )}{" "}
+        </AnimatePresence>{" "}
       </header>
-
       {/* Mobile Menu */}
       <AnimatePresence>
         {mobileMenuOpen && (
@@ -244,10 +238,8 @@ export function MainLayout({ children }: MainLayoutProps) {
           </>
         )}
       </AnimatePresence>
-
       {/* Main Content */}
       <main>{children}</main>
-
       {/* Footer */}
       <footer className="border-t border-border bg-card mt-auto">
         <div className="container py-12">

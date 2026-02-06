@@ -64,51 +64,10 @@ export default function Index() {
   return (
     <MainLayout>
       {/* Hero Section */}
-      {/* <section className="gradient-hero text-primary-foreground py-20 lg:py-32">
-        <div className="container">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="max-w-3xl mx-auto text-center"
-          >
-            <h1 className="text-4xl lg:text-6xl font-bold font-display mb-6">
-              Transform Your Future with Online Learning
-            </h1>
-            <p className="text-lg lg:text-xl text-primary-foreground/80 mb-8">
-              Access world-class education from anywhere. Join thousands of
-              learners advancing their careers.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/courses">
-                <Button
-                  size="lg"
-                  variant="secondary"
-                  className="h-14 px-8 text-lg"
-                >
-                  Explore Courses <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
-              <Link to="/register">
-                <Button
-                  size="lg"
-                  variant="secondary"
-                  className="h-14 px-8 text-lg hover:bg-primary-foreground/10"
-                >
-                  Start Free Trial
-                </Button>
-              </Link>
-            </div>
-          </motion.div>
-        </div>
-      </section> */}
-
       <section
         className="relative py-20 lg:py-32 text-primary-foreground overflow-hidden bg-cover bg-center"
         style={{
-          // backgroundImage: `url('https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&q=80&w=2070')`,
-          // backgroundImage: `url('/pexels-artempodrez-8087865.jpg')`,
-          backgroundImage: `url('/pexels-ron-lach-10643463.jpg')`,
-          // backgroundImage: `url('/hero-bg.png')`,
+          backgroundImage: `url('/BG.webp')`,
         }}
       >
         {/* Optional subtle overlay to make text more readable */}
@@ -152,21 +111,25 @@ export default function Index() {
       </section>
 
       {/* Features */}
-      <section className="py-16 border-b">
+      <section className="py-16 lg:py-20 border-b bg-background">
         <div className="container">
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-3 gap-8 lg:gap-12">
             {features.map((feature, i) => (
               <motion.div
                 key={feature.title}
                 initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
-                className="text-center"
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-100px" }}
+                transition={{ delay: i * 0.1, duration: 0.5 }}
+                whileHover={{ y: -5 }}
+                className="text-center group cursor-default"
               >
-                <div className="mx-auto h-16 w-16 rounded-2xl gradient-accent flex items-center justify-center mb-4">
-                  <feature.icon className="h-8 w-8 text-accent-foreground" />
+                <div className="mx-auto h-16 w-16 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300 shadow-lg">
+                  <feature.icon className="h-8 w-8 text-white" />
                 </div>
-                <h3 className="text-xl font-bold mb-2">{feature.title}</h3>
+                <h3 className="text-xl font-bold mb-2 group-hover:text-primary transition-colors">
+                  {feature.title}
+                </h3>
                 <p className="text-muted-foreground">{feature.description}</p>
               </motion.div>
             ))}
@@ -231,20 +194,30 @@ export default function Index() {
       </section>
 
       {/* CTA */}
-      <section className="py-16 bg-muted">
+      <section className="py-16 lg:py-20 bg-gradient-to-br from-primary to-accent">
         <div className="container text-center">
-          <h2 className="text-3xl font-bold font-display mb-4">
-            Ready to Start Learning?
-          </h2>
-          <p className="text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Join our community of learners and take the first step towards your
-            goals.
-          </p>
-          <Link to="/register">
-            <Button size="lg" className="h-14 px-8">
-              Get Started Free
-            </Button>
-          </Link>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+          >
+            <h2 className="text-3xl lg:text-4xl font-bold font-display mb-4 text-white">
+              Ready to Start Learning?
+            </h2>
+            <p className="text-white/90 text-lg mb-8 max-w-2xl mx-auto">
+              Join our community of learners and take the first step towards
+              your goals.
+            </p>
+            <Link to="/register">
+              <Button
+                size="lg"
+                className="h-14 px-8 text-lg bg-white text-primary hover:bg-white/90 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
+              >
+                Get Started Free
+              </Button>
+            </Link>
+          </motion.div>
         </div>
       </section>
     </MainLayout>
