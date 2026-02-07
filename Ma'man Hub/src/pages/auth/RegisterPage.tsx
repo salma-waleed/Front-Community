@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Controller } from "react-hook-form";
 import {
   Eye,
   EyeOff,
@@ -18,14 +17,16 @@ import {
   Video,
   Stethoscope,
   Check,
+  Calendar,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { PasswordStrength } from "@/components/ui/PasswordStrength";
+import { authService } from "@/services/authService";
 import { cn } from "@/lib/utils";
 
 const roles = [
@@ -55,42 +56,45 @@ const roles = [
   },
 ];
 
+// Base schema with common fields for all users
 const baseSchema = z.object({
+  fullName: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   confirmPassword: z.string(),
+  dateOfBirth: z.string().min(1, "Date of birth is required"),
+  country: z.string().min(1, "Please select a country"),
+  otherCountry: z.string().optional(),
   terms: z.boolean().refine((val) => val === true, {
     message: "You must accept the terms and conditions",
   }),
 });
 
-const studentSchema = baseSchema.extend({
-  fullName: z.string().min(2, "Name must be at least 2 characters"),
-});
+const studentSchema = baseSchema;
 
-const parentSchema = baseSchema.extend({
-  fullName: z.string().min(2, "Name must be at least 2 characters"),
-  childName: z.string().min(2, "Child's name is required"),
-});
+const parentSchema = baseSchema;
 
 const creatorSchema = baseSchema.extend({
-  fullName: z.string().min(2, "Name must be at least 2 characters"),
-  expertise: z.string().min(2, "Please specify your area of expertise"),
+  expertise: z.string().min(2, "Area of expertise is required"),
   portfolioUrl: z
     .string()
     .url("Please enter a valid URL")
     .optional()
     .or(z.literal("")),
+  cvLink: z.string().url("Please enter a valid CV link").min(1, "CV link is required"),
 });
 
 const specialistSchema = baseSchema.extend({
-  fullName: z.string().min(2, "Name must be at least 2 characters"),
-  specialization: z.string().min(2, "Please specify your specialization"),
-  credentials: z.string().min(5, "Please provide your credentials"),
+  expertise: z.string().min(2, "Area of expertise is required"),
+  portfolioUrl: z
+    .string()
+    .url("Please enter a valid URL")
+    .optional()
+    .or(z.literal("")),
+  cvLink: z.string().url("Please enter a valid CV link").min(1, "CV link is required"),
 });
 
 type RegisterFormData = z.infer<typeof studentSchema> &
-  Partial<z.infer<typeof parentSchema>> &
   Partial<z.infer<typeof creatorSchema>> &
   Partial<z.infer<typeof specialistSchema>>;
 
@@ -98,37 +102,42 @@ export default function RegisterPage() {
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [password, setPassword] = useState("");
+  const [showOtherCountry, setShowOtherCountry] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  const registerSchema = z
-    .object({
-      name: z.string().min(2, "Name must be at least 2 characters"),
-      email: z.string().email("Please enter a valid email address"),
-      password: z.string().min(6, "Password must be at least 6 characters"),
-      confirmPassword: z.string(),
-      terms: z.boolean().refine((val) => val === true, {
-        // ← أضيفي هذا السطر
-        message: "You must agree to the terms",
-      }),
-    })
-    .refine((data) => data.password === data.confirmPassword, {
-      message: "Passwords don't match",
-      path: ["confirmPassword"],
-    });
-
   const getSchema = () => {
-    switch (selectedRole) {
-      case "parent":
-        return parentSchema;
-      case "content_creator":
-        return creatorSchema;
-      case "specialist":
-        return specialistSchema;
-      default:
-        return studentSchema;
-    }
+    const schema = (() => {
+      switch (selectedRole) {
+        case "parent":
+          return parentSchema;
+        case "content_creator":
+          return creatorSchema;
+        case "specialist":
+          return specialistSchema;
+        default:
+          return studentSchema;
+      }
+    })();
+
+    // Add validation for other country field
+    return schema
+      .refine((data) => data.password === data.confirmPassword, {
+        message: "Passwords don't match",
+        path: ["confirmPassword"],
+      })
+      .refine(
+        (data) => {
+          if (data.country === "Other") {
+            return data.otherCountry && data.otherCountry.length >= 2;
+          }
+          return true;
+        },
+        {
+          message: "Please specify your country",
+          path: ["otherCountry"],
+        }
+      );
   };
 
   const {
@@ -136,14 +145,10 @@ export default function RegisterPage() {
     handleSubmit,
     control,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<RegisterFormData>({
-    resolver: zodResolver(
-      getSchema().refine((data) => data.password === data.confirmPassword, {
-        message: "Passwords don't match",
-        path: ["confirmPassword"],
-      }),
-    ),
+    resolver: zodResolver(getSchema()),
     defaultValues: {
       terms: false,
     },
@@ -151,79 +156,77 @@ export default function RegisterPage() {
 
   const watchedPassword = watch("password");
 
-  const onSubmit = async (data: RegisterFormData) => {
-    if (!selectedRole) {
-      toast({
-        title: "Please select a role",
-        description: "Choose your account type to continue.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const { data: authData, error } = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/verify-email`,
-          data: {
-            full_name: data.fullName,
-            role: selectedRole,
-          },
-        },
-      });
-
-      if (error) {
-        if (error.message.includes("already registered")) {
-          toast({
-            title: "Account exists",
-            description:
-              "An account with this email already exists. Please log in.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Registration failed",
-            description: error.message,
-            variant: "destructive",
-          });
-        }
-        return;
-      }
-
-      toast({
-        title: "Account created!",
-        description: "Please check your email to verify your account.",
-      });
-      navigate("/verify-email");
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
+  const roleMapping: Record<string, number> = {
+    student: 1,
+    parent: 2,
+    content_creator: 3,
+    specialist: 4,
+    admin: 5,
   };
 
-  const handleGoogleLogin = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/dashboard`,
-      },
+  const onSubmit = async (data: RegisterFormData) => {
+  if (!selectedRole) {
+    toast({
+      title: "Please select a role",
+      description: "Choose your account type to continue.",
+      variant: "destructive",
     });
+    return;
+  }
 
-    if (error) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+  setIsLoading(true);
+  try {
+    const finalCountry = data.country === "Other" ? data.otherCountry : data.country;
+
+    // Base registration data (common for all roles)
+    const registerData: any = {
+      fullName: data.fullName,
+      email: data.email,
+      password: data.password,
+      role: roleMapping[selectedRole],
+      dateOfBirth: data.dateOfBirth,
+      country: finalCountry,
+    };
+
+    // Only add role-specific fields if they exist and the role requires them
+    if (selectedRole === "content_creator" || selectedRole === "specialist") {
+      registerData.expertise = data.expertise;
+      registerData.cvLink = data.cvLink;
+      if (data.portfolioUrl && data.portfolioUrl.trim() !== "") {
+        registerData.portfolioUrl = data.portfolioUrl;
+      }
     }
+
+    console.log("Sending registration data:", registerData);
+
+    await authService.register(registerData);
+
+    toast({
+      title: "Account created!",
+      description: "Please check your email to verify your account.",
+    });
+    navigate("/verify-email");
+  } catch (error: any) {
+    console.error("Registration error:", error.response?.data);
+
+    const message =
+      error.response?.data?.message ||
+      error.response?.data?.error ||
+      error.message ||
+      "Registration failed";
+
+    toast({
+      title: "Registration failed",
+      description: message,
+      variant: "destructive",
+    });
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+  const handleGoogleLogin = () => {
+    authService.googleAuth();
   };
 
   return (
@@ -303,7 +306,7 @@ export default function RegisterPage() {
                   "flex flex-col items-center gap-2 rounded-xl border-2 p-4 text-center transition-all",
                   selectedRole === role.id
                     ? "border-accent bg-accent/5 shadow-glow"
-                    : "border-border hover:border-accent/50",
+                    : "border-border hover:border-accent/50"
                 )}
               >
                 <div
@@ -311,7 +314,7 @@ export default function RegisterPage() {
                     "flex h-10 w-10 items-center justify-center rounded-lg transition-colors",
                     selectedRole === role.id
                       ? "bg-accent text-accent-foreground"
-                      : "bg-muted text-muted-foreground",
+                      : "bg-muted text-muted-foreground"
                   )}
                 >
                   <role.icon className="h-5 w-5" />
@@ -376,13 +379,20 @@ export default function RegisterPage() {
                 onSubmit={handleSubmit(onSubmit)}
                 className="space-y-4"
               >
+                {/* Full Name */}
                 <div className="space-y-2">
                   <Label htmlFor="fullName">Full Name</Label>
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       id="fullName"
-                      placeholder="John Doe"
+                      placeholder={
+                        selectedRole === "student"
+                          ? "e.g., Ahmed Ali"
+                          : selectedRole === "parent"
+                            ? "e.g., Fatima Hassan"
+                            : "e.g., Dr. Mohammed Ibrahim"
+                      }
                       className="pl-10 h-12"
                       {...register("fullName")}
                     />
@@ -394,94 +404,7 @@ export default function RegisterPage() {
                   )}
                 </div>
 
-                {/* Dynamic Fields */}
-                {selectedRole === "parent" && (
-                  <div className="space-y-2">
-                    <Label htmlFor="childName">Child's Name</Label>
-                    <Input
-                      id="childName"
-                      placeholder="Child's full name"
-                      className="h-12"
-                      {...register("childName")}
-                    />
-                    {errors.childName && (
-                      <p className="text-sm text-destructive">
-                        {errors.childName.message}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {selectedRole === "content_creator" && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="expertise">Area of Expertise</Label>
-                      <Input
-                        id="expertise"
-                        placeholder="e.g., Web Development, Marketing"
-                        className="h-12"
-                        {...register("expertise")}
-                      />
-                      {errors.expertise && (
-                        <p className="text-sm text-destructive">
-                          {errors.expertise.message}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="portfolioUrl">
-                        Portfolio URL (Optional)
-                      </Label>
-                      <Input
-                        id="portfolioUrl"
-                        placeholder="https://yourportfolio.com"
-                        className="h-12"
-                        {...register("portfolioUrl")}
-                      />
-                      {errors.portfolioUrl && (
-                        <p className="text-sm text-destructive">
-                          {errors.portfolioUrl.message}
-                        </p>
-                      )}
-                    </div>
-                  </>
-                )}
-
-                {selectedRole === "specialist" && (
-                  <>
-                    <div className="space-y-2">
-                      <Label htmlFor="specialization">Specialization</Label>
-                      <Input
-                        id="specialization"
-                        placeholder="e.g., Educational Psychology"
-                        className="h-12"
-                        {...register("specialization")}
-                      />
-                      {errors.specialization && (
-                        <p className="text-sm text-destructive">
-                          {errors.specialization.message}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="credentials">
-                        Professional Credentials
-                      </Label>
-                      <Input
-                        id="credentials"
-                        placeholder="e.g., PhD, Licensed Counselor"
-                        className="h-12"
-                        {...register("credentials")}
-                      />
-                      {errors.credentials && (
-                        <p className="text-sm text-destructive">
-                          {errors.credentials.message}
-                        </p>
-                      )}
-                    </div>
-                  </>
-                )}
-
+                {/* Email */}
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
                   <div className="relative">
@@ -501,6 +424,144 @@ export default function RegisterPage() {
                   )}
                 </div>
 
+                {/* Date of Birth */}
+                <div className="space-y-2">
+                  <Label htmlFor="dateOfBirth">Date of Birth</Label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                    <Input
+                      id="dateOfBirth"
+                      type="date"
+                      className="pl-10 h-12"
+                      {...register("dateOfBirth")}
+                    />
+                  </div>
+                  {errors.dateOfBirth && (
+                    <p className="text-sm text-destructive">
+                      {errors.dateOfBirth.message}
+                    </p>
+                  )}
+                </div>
+
+                {/* Country */}
+                <div className="space-y-2">
+                  <Label htmlFor="country">Country</Label>
+                  <div className="relative">
+                    <Globe className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none z-10" />
+                    <select
+                      id="country"
+                      className="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 pl-10 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      {...register("country", {
+                        onChange: (e) => {
+                          setShowOtherCountry(e.target.value === "Other");
+                        },
+                      })}
+                    >
+                      <option value="">Select your country</option>
+                      <option value="Egypt">Egypt</option>
+                      <option value="Iraq">Iraq</option>
+                      <option value="Jordan">Jordan</option>
+                      <option value="Palestine">Palestine</option>
+                      <option value="Saudi Arabia">Saudi Arabia</option>
+                      <option value="Syria">Syria</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  {errors.country && (
+                    <p className="text-sm text-destructive">
+                      {errors.country.message}
+                    </p>
+                  )}
+                </div>
+
+                {/* Other Country Input */}
+                {showOtherCountry && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="space-y-2"
+                  >
+                    <Label htmlFor="otherCountry">Specify Country</Label>
+                    <div className="relative">
+                      <Globe className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="otherCountry"
+                        placeholder="Enter your country"
+                        className="pl-10 h-12"
+                        {...register("otherCountry")}
+                      />
+                    </div>
+                    {errors.otherCountry && (
+                      <p className="text-sm text-destructive">
+                        {errors.otherCountry.message}
+                      </p>
+                    )}
+                  </motion.div>
+                )}
+
+                {/* Role-specific fields for Content Creator and Specialist */}
+                {(selectedRole === "content_creator" ||
+                  selectedRole === "specialist") && (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="expertise">
+                          Area of Expertise <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id="expertise"
+                          placeholder={
+                            selectedRole === "content_creator"
+                              ? "e.g., Early Childhood Education, Arabic Language, STEM for Kids"
+                              : "e.g., Child Psychology, Special Education, Learning Disabilities"
+                          }
+                          className="h-12"
+                          {...register("expertise")}
+                        />
+                        {errors.expertise && (
+                          <p className="text-sm text-destructive">
+                            {errors.expertise.message}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="portfolioUrl">
+                          Portfolio URL (Optional)
+                        </Label>
+                        <Input
+                          id="portfolioUrl"
+                          placeholder="https://yourportfolio.com"
+                          className="h-12"
+                          {...register("portfolioUrl")}
+                        />
+                        {errors.portfolioUrl && (
+                          <p className="text-sm text-destructive">
+                            {errors.portfolioUrl.message}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="cvLink">
+                          CV Link <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id="cvLink"
+                          placeholder="https://drive.google.com/your-cv or https://linkedin.com/in/yourprofile"
+                          className="h-12"
+                          {...register("cvLink")}
+                        />
+                        {errors.cvLink && (
+                          <p className="text-sm text-destructive">
+                            {errors.cvLink.message}
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                {/* Password */}
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
                   <div className="relative">
@@ -510,9 +571,7 @@ export default function RegisterPage() {
                       type={showPassword ? "text" : "password"}
                       placeholder="Create a strong password"
                       className="pl-10 pr-10 h-12"
-                      {...register("password", {
-                        onChange: (e) => setPassword(e.target.value),
-                      })}
+                      {...register("password")}
                     />
                     <button
                       type="button"
@@ -534,6 +593,7 @@ export default function RegisterPage() {
                   <PasswordStrength password={watchedPassword || ""} />
                 </div>
 
+                {/* Confirm Password */}
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword">Confirm Password</Label>
                   <div className="relative">
@@ -553,8 +613,8 @@ export default function RegisterPage() {
                   )}
                 </div>
 
+                {/* Terms */}
                 <div className="flex items-start space-x-2">
-                  {/* <Checkbox id="terms" {...register("terms")} /> */}
                   <Controller
                     name="terms"
                     control={control}
@@ -566,7 +626,6 @@ export default function RegisterPage() {
                       />
                     )}
                   />
-
                   <Label
                     htmlFor="terms"
                     className="text-sm font-normal leading-relaxed"
