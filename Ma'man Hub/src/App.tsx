@@ -17,9 +17,13 @@ import EmailVerificationPage from "./pages/auth/EmailVerificationPage";
 import AdminProfilePage from "./pages/profile/AdminProfilePage";
 import CreatorProfilePage from "./pages/profile/CreatorProfilePage";
 import ParentProfilePage from "./pages/profile/ParentProfilePage";
+import StudentProfilePage from "./pages/profile/StudentProfilePage";
 
 // spcialist pages
 import SpecialistProfilePage from "./pages/profile/SpecialistProfilePage";
+
+// Admin Pages
+import UserManagementPage from "./pages/admin/UserManagementPage";
 
 const queryClient = new QueryClient();
 
@@ -43,6 +47,7 @@ const App = () => (
           <Route path="/creator/profile" element={<CreatorProfilePage />} />
 
           {/* Admin Routes */}
+          <Route path="/admin/users" element={<UserManagementPage />} />
           <Route path="/admin/profile" element={<AdminProfilePage />} />
 
           {/* Parent Routes */}
@@ -53,6 +58,9 @@ const App = () => (
             path="/specialist/profile"
             element={<SpecialistProfilePage />}
           />
+
+          {/* Student Dashboard Routes */}
+          <Route path="/profile" element={<StudentProfilePage />} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>

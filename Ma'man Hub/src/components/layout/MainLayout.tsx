@@ -1,4 +1,4 @@
-// if user
+// if logged in
 // import { ReactNode, useState } from "react";
 // import { Link, useNavigate, useLocation } from "react-router-dom";
 // import { motion, AnimatePresence } from "framer-motion";
