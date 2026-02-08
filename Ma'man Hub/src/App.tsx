@@ -25,6 +25,17 @@ import SpecialistProfilePage from "./pages/profile/SpecialistProfilePage";
 // Admin Pages
 import UserManagementPage from "./pages/admin/UserManagementPage";
 
+// Dashboard Pages
+import CourseProgressPage from "./pages/dashboard/CourseProgressPage";
+
+// Course Pages
+import CoursesCatalogPage from "./pages/courses/CoursesCatalogPage";
+import CourseDetailPage from "./pages/courses/CourseDetailPage";
+import CoursePlayerPage from "./pages/courses/CoursePlayerPage";
+
+// Quiz Pages
+import QuizPage from "./pages/quiz/QuizPage";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -61,6 +72,19 @@ const App = () => (
 
           {/* Student Dashboard Routes */}
           <Route path="student/profile" element={<StudentProfilePage />} />
+
+          {/* Course Routes */}
+          <Route path="/courses" element={<CoursesCatalogPage />} />
+          <Route path="/courses/:courseId" element={<CourseDetailPage />} />
+          <Route
+            path="/course/:courseId/learn"
+            element={<CoursePlayerPage />}
+          />
+          <Route
+            path="/course/:courseId/progress"
+            element={<CourseProgressPage />}
+          />
+          <Route path="/course/:courseId/quiz/:quizId" element={<QuizPage />} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>
