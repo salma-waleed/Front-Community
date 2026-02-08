@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,12 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuthStore } from "@/stores/authStore";
+import { authService } from "@/services/authService";
+// import { useAuthStore } from "@/stores/authStore";
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
+  rememberMe: z.boolean().default(false),
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
@@ -23,68 +24,151 @@ type LoginFormData = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { rememberMe, setRememberMe, setUser, setSession } = useAuthStore();
+  const [searchParams] = useSearchParams();
+  // const { setUser } = useAuthStore();
   const { toast } = useToast();
   const navigate = useNavigate();
 
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
+    defaultValues: {
+      rememberMe: false,
+    },
   });
+
+  const rememberMe = watch("rememberMe");
+
+  // Auto-fill email from verification flow or URL parameter
+  useEffect(() => {
+    const getEmailFromSources = (): string => {
+      const emailFromUrl = searchParams.get("email");
+      if (emailFromUrl) return emailFromUrl;
+
+      const emailFromSession = sessionStorage.getItem("pending_verification_email");
+      if (emailFromSession) {
+        sessionStorage.removeItem("pending_verification_email");
+        return emailFromSession;
+      }
+
+      const emailFromLocal = localStorage.getItem("pending_verification_email");
+      if (emailFromLocal) {
+        localStorage.removeItem("pending_verification_email");
+        return emailFromLocal;
+      }
+
+      return "";
+    };
+
+    const email = getEmailFromSources();
+    if (email) {
+      setValue("email", email);
+    }
+  }, [searchParams, setValue]);
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
+    
     try {
-      const { data: authData, error } = await supabase.auth.signInWithPassword({
+      console.log("Attempting login with email:", data.email);
+      
+      const authData = await authService.login({
         email: data.email,
         password: data.password,
+        rememberMe: data.rememberMe,
       });
+      
+      console.log("Login successful:", authData);
 
-      if (error) {
+      const userData = authData.user;
+      
+      // Store user data in auth store
+      localStorage.setItem("user",JSON.stringify(userData))
+      
+      const isFirstLogin = userData.isFirstLogin
+      
+      // Map role string to role path
+      const rolePathMap: Record<string, string> = {
+        "Student": "student",
+        "student": "student",
+        "Parent": "parent",
+        "parent": "parent",
+        "ContentCreator": "content-creator",
+        "content-creator": "content-creator",
+        "Specialist": "specialist",
+        "specialist": "specialist",
+        "Admin": "admin",
+        "admin": "admin",
+      };
+      
+      const rolePath = rolePathMap[userData.role] || "student";
+      
+      // Determine redirect path
+      let redirectPath: string;
+      if (isFirstLogin) {
+        redirectPath = `/${rolePath}/profile`;
+        
         toast({
-          title: "Login failed",
-          description: error.message,
-          variant: "destructive",
+          title: "Welcome to EduPlatform!",
+          description: "Please complete your profile to get started.",
         });
-        return;
+      } else {
+        // Subsequent login → redirect to dashboard
+        redirectPath = `/${rolePath}/dashboard`;
+        
+        toast({
+          title: "Welcome back!",
+          description: `Logged in as ${userData.fullName}`,
+        });
+      }
+      
+      console.log("Redirecting to:", redirectPath);
+      navigate(redirectPath);
+      
+    } catch (error: any) {
+      console.error("=== LOGIN ERROR ===");
+      console.error("Error object:", error);
+      console.error("Error response:", error.response);
+      console.error("Error response data:", error.response?.data);
+      console.error("Error message:", error.message);
+      console.error("===================");
+      
+      // Extract error message from various possible formats
+      let message = "Invalid email or password";
+      
+      if (error.response?.data) {
+        if (typeof error.response.data === 'string') {
+          message = error.response.data;
+        } else if (error.response.data.message) {
+          message = error.response.data.message;
+        } else if (error.response.data.error) {
+          message = error.response.data.error;
+        } else if (error.response.data.title) {
+          message = error.response.data.title;
+        }
+      } else if (error.message) {
+        message = error.message;
       }
 
-      setUser(authData.user);
-      setSession(authData.session);
       toast({
-        title: "Welcome back!",
-        description: "You have successfully logged in.",
-      });
-      navigate("/dashboard");
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred. Please try again.",
+        title: "Login failed",
+        description: message,
         variant: "destructive",
       });
+      
+      // Stay on login page (don't navigate away)
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleGoogleLogin = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/dashboard`,
-      },
-    });
-
-    if (error) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
+  const handleGoogleLogin = () => {
+    authService.googleAuth();
   };
 
   return (
@@ -118,6 +202,7 @@ export default function LoginPage() {
             variant="outline"
             className="w-full h-12 gap-3"
             onClick={handleGoogleLogin}
+            disabled={isLoading}
           >
             <svg className="h-5 w-5" viewBox="0 0 24 24">
               <path
@@ -163,6 +248,7 @@ export default function LoginPage() {
                   type="email"
                   placeholder="name@example.com"
                   className="pl-10 h-12"
+                  disabled={isLoading}
                   {...register("email")}
                 />
               </div>
@@ -190,12 +276,14 @@ export default function LoginPage() {
                   type={showPassword ? "text" : "password"}
                   placeholder="Enter your password"
                   className="pl-10 pr-10 h-12"
+                  disabled={isLoading}
                   {...register("password")}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  disabled={isLoading}
                 >
                   {showPassword ? (
                     <EyeOff className="h-4 w-4" />
@@ -215,7 +303,8 @@ export default function LoginPage() {
               <Checkbox
                 id="remember"
                 checked={rememberMe}
-                onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                onCheckedChange={(checked) => setValue("rememberMe", checked as boolean)}
+                disabled={isLoading}
               />
               <Label htmlFor="remember" className="text-sm font-normal">
                 Remember me for 30 days

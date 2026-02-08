@@ -22,49 +22,51 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import { useAuthStore } from "@/stores/authStore";
+import { authService } from "@/services/authService";
+
+// import { useAuthStore } from "@/stores/authStore";
 
 interface DashboardLayoutProps {
   children: ReactNode;
 }
 
 const studentNavigation = [
-  { name: "Dashboard", href: "/dashboard", icon: Home },
-  { name: "My Courses", href: "/my-courses", icon: BookOpen },
-  { name: "Messages", href: "/messages", icon: MessageSquare },
-  { name: "Group Chats", href: "/groups", icon: Users },
-  { name: "Achievements", href: "/achievements", icon: Trophy },
-  { name: "Profile", href: "/profile", icon: User },
-  { name: "Settings", href: "/settings", icon: Settings },
+  { name: "Dashboard", href: "/student/dashboard", icon: Home },
+  { name: "My Courses", href: "/student/my-courses", icon: BookOpen },
+  { name: "Messages", href: "/student/messages", icon: MessageSquare },
+  { name: "Group Chats", href: "/student/groups", icon: Users },
+  { name: "Achievements", href: "/student/achievements", icon: Trophy },
+  { name: "Profile", href: "/student/profile", icon: User },
+  { name: "Settings", href: "/student/settings", icon: Settings },
 ];
 
 const creatorNavigation = [
-  { name: "Dashboard", href: "/creator", icon: Home },
-  { name: "Upload Video", href: "/creator/upload", icon: BarChart3 },
-  { name: "Go Live", href: "/creator/go-live", icon: BookOpen },
-  { name: "Messages", href: "/messages", icon: MessageSquare },
-  { name: "Profile", href: "/creator/profile", icon: User },
-  { name: "Settings", href: "/settings", icon: Settings },
+  { name: "Dashboard", href: "/content-creator/dashboard", icon: Home },
+  { name: "Upload Video", href: "/content-creator/upload", icon: BarChart3 },
+  { name: "Go Live", href: "/content-creator/go-live", icon: BookOpen },
+  { name: "Messages", href: "/content-creator/messages", icon: MessageSquare },
+  { name: "Profile", href: "/content-creator/profile", icon: User },
+  { name: "Settings", href: "/content-creator/settings", icon: Settings },
 ];
 
 const specialistNavigation = [
-  { name: "Dashboard", href: "/dashboard", icon: Home },
-  { name: "My Sessions", href: "/sessions", icon: BookOpen },
-  { name: "Messages", href: "/messages", icon: MessageSquare },
+  { name: "Dashboard", href: "/specialist/dashboard", icon: Home },
+  { name: "My Sessions", href: "/specialist/sessions", icon: BookOpen },
+  { name: "Messages", href: "/specialist/messages", icon: MessageSquare },
   { name: "Profile", href: "/specialist/profile", icon: User },
-  { name: "Settings", href: "/settings", icon: Settings },
+  { name: "Settings", href: "/specialist/settings", icon: Settings },
 ];
 
 const parentNavigation = [
-  { name: "Dashboard", href: "/parent", icon: Home },
+  { name: "Dashboard", href: "/parent/dashboard", icon: Home },
   { name: "My Children", href: "/parent/children", icon: Users },
-  { name: "Messages", href: "/messages", icon: MessageSquare },
+  { name: "Messages", href: "/parent/messages", icon: MessageSquare },
   { name: "Profile", href: "/parent/profile", icon: User },
-  { name: "Settings", href: "/settings", icon: Settings },
+  { name: "Settings", href: "/parent/settings", icon: Settings },
 ];
 
 const adminNavigation = [
-  { name: "Dashboard", href: "/admin", icon: Home },
+  { name: "Dashboard", href: "/admin/dashboard", icon: Home },
   { name: "Users", href: "/admin/users", icon: User },
   { name: "Moderation", href: "/admin/moderation", icon: Shield },
   { name: "Financial", href: "/admin/financial", icon: DollarSign },
@@ -77,21 +79,91 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, role, logout } = useAuthStore();
+  // const { user, logout } = useAuthStore();
 
-  const navigation =
-    role === "admin"
-      ? adminNavigation
-      : role === "content_creator"
-        ? creatorNavigation
-        : role === "specialist"
-          ? specialistNavigation
-          : role === "parent"
-            ? parentNavigation
-            : studentNavigation;
+  // Get user from localStorage with error handling
+  const getUserData = () => {
+    try {
+      const userStr = localStorage.getItem("user");
+      if (!userStr) return null;
+      return JSON.parse(userStr);
+    } catch (error) {
+      console.error("Error parsing user data:", error);
+      return null;
+    }
+  };
+
+  const user = getUserData();
+
+  // Redirect to login if no user data
+  if (!user) {
+    navigate("/login");
+    return null;
+  }
+
+  // Get user data from localStorage
+  const fullName = user?.fullName || "User";
+  const role = user?.role || "Student";
+  const profilePictureUrl = user?.profilePictureUrl;
+
+  // Get initials from full name
+  const getInitials = (name: string): string => {
+    const parts = name.trim().split(" ");
+    if (parts.length >= 2) {
+      return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
+    }
+    return name.charAt(0).toUpperCase();
+  };
+
+  // Determine navigation based on role (case-insensitive and handles variations)
+  const getNavigationForRole = (userRole: string) => {
+    const roleLower = userRole.toLowerCase().trim();
+    
+    // Admin role
+    if (roleLower === "admin") {
+      return adminNavigation;
+    }
+    
+    // Content Creator role (handle multiple variations)
+    if (roleLower === "contentcreator" || 
+        roleLower === "content-creator" || 
+        roleLower === "content creator") {
+      return creatorNavigation;
+    }
+    
+    // Specialist role
+    if (roleLower === "specialist") {
+      return specialistNavigation;
+    }
+    
+    // Parent role
+    if (roleLower === "parent") {
+      return parentNavigation;
+    }
+    
+    // Student role (default)
+    return studentNavigation;
+  };
+
+  const navigation = getNavigationForRole(role);
+
+  // Get display role name
+  const getDisplayRole = (userRole: string): string => {
+    const roleLower = userRole.toLowerCase().trim();
+    
+    if (roleLower === "admin") return "Admin";
+    if (roleLower === "contentcreator" || roleLower === "content-creator" || roleLower === "content creator") {
+      return "Content Creator";
+    }
+    if (roleLower === "specialist") return "Specialist";
+    if (roleLower === "parent") return "Parent";
+    return "Student";
+  };
+
+  const displayRole = getDisplayRole(role);
 
   const handleLogout = () => {
-    logout();
+    authService.logout();
     navigate("/login");
   };
 
@@ -229,18 +301,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             )}
           >
             <Avatar className="h-9 w-9">
-              <AvatarImage src="" />
+              <AvatarImage src={profilePictureUrl} alt={fullName} />
               <AvatarFallback className="bg-sidebar-accent text-sidebar-accent-foreground">
-                {user?.email?.charAt(0).toUpperCase() || "U"}
+                {getInitials(fullName)}
               </AvatarFallback>
             </Avatar>
             {sidebarOpen && (
               <div className="flex-1 overflow-hidden">
                 <p className="truncate text-sm font-medium text-sidebar-foreground">
-                  {user?.email || "User"}
+                  {fullName}
                 </p>
-                <p className="truncate text-xs text-sidebar-foreground/60 capitalize">
-                  {role || "Student"}
+                <p className="truncate text-xs text-sidebar-foreground/60">
+                  {displayRole}
                 </p>
               </div>
             )}
