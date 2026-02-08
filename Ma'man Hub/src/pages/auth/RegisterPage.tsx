@@ -201,11 +201,19 @@ export default function RegisterPage() {
 
     await authService.register(registerData);
 
+    // ✅ IMPORTANT: Store email for verification page
+    // This allows the user to resend verification without re-entering their email
+    sessionStorage.setItem("pending_verification_email", data.email);
+
     toast({
       title: "Account created!",
       description: "Please check your email to verify your account.",
     });
-    navigate("/verify-email");
+    
+    // ✅ Navigate to verification page with email in URL
+    // This provides immediate access to the email on the verification page
+    navigate(`/verify-email?email=${encodeURIComponent(data.email)}`);
+    
   } catch (error: any) {
     console.error("Registration error:", error.response?.data);
 

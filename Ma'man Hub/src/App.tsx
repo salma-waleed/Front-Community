@@ -60,7 +60,7 @@ const App = () => (
           />
 
           {/* Student Dashboard Routes */}
-          <Route path="/profile" element={<StudentProfilePage />} />
+          <Route path="student/profile" element={<StudentProfilePage />} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>
