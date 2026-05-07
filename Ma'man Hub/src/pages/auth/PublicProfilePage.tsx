@@ -473,9 +473,9 @@ export default function PublicProfilePage() {
 
                 <div>
                   <h1 className="text-3xl font-bold">{profile.fullName}</h1>
-                  {isSpecialist && profile.professionalTitle
-                    ? <p className="text-muted-foreground mt-1">{profile.professionalTitle}</p>
-                    : <p className="text-muted-foreground capitalize mt-1">{profile.role}</p>}
+                {isSpecialist && profile.professionalTitle
+  ? <p className="text-muted-foreground mt-1 break-words max-w-xl">{profile.professionalTitle}</p>
+  : <p className="text-muted-foreground capitalize mt-1">{profile.role}</p>}
                 </div>
 
                 {profile.specializations && profile.specializations.length > 0 && (

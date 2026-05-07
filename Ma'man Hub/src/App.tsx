@@ -59,10 +59,11 @@ import ParentProfilePage from "./pages/parent/ParentProfilePage";
 // Specialist
 import SpecialistProfilePage from "./pages/specialist/SpecialistProfilePage";
 import BookSessionPage from "./pages/specialist/BookSessionPage";
-import PublicSpecialistProfilePage from "./pages/specialist/PublicSpecialistProfilePage";
 import SpecialistDashboardPage from "./pages/specialist/SpecialistDashboardPage";
 import SpecialistListingPage from "./pages/specialist/SpecialistListingPage";
 import StudentBookingsPage from "./pages/specialist/StudentBookingsPage";
+import ConfirmBookingPage from "./pages/specialist/ConfirmBookingPage";
+import SpecialistSessionsPage from "./pages/specialist/SpecialistSessionsPage";
 
 // Student
 import StudentProfilePage from "./pages/student/StudentProfilePage";
@@ -333,7 +334,7 @@ const App = () => (
             }
           />
           <Route
-            path="/specialist/list"
+            path="/specialists"
             element={
                 <SpecialistListingPage />
             }
@@ -341,14 +342,7 @@ const App = () => (
 
 
           <Route
-            path="/specialist/profile/:id"
-            element={
-                <PublicSpecialistProfilePage />
-            }
-          />
-
-          <Route
-            path="/specialist/book/:id"
+            path="/specialists/:specialistId/book"
             element={
               <ProtectedRoute allowedRoles={[...ALL_AUTHENTICATED]}>
                 <BookSessionPage />
@@ -357,12 +351,27 @@ const App = () => (
           />
 
           <Route
-            path="/specialist/student-bookings"
+            path="/bookings"
             element={
                 <StudentBookingsPage />
             }
           />
 
+          <Route
+            path="/bookings/:appointmentId/confirm"
+            element={
+                <ConfirmBookingPage />
+            }
+          />
+
+          <Route
+  path="/specialist/sessions"
+  element={
+    <ProtectedRoute allowedRoles={[...SPECIALIST]}>
+      <SpecialistSessionsPage />
+    </ProtectedRoute>
+  }
+/>
 
           {/* ── Student ──────────────────────────────────────────────────────── */}
           <Route

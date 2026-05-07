@@ -1,4 +1,3 @@
-// pages/StudentBookingsPage.tsx
 import { useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -7,13 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  CalendarDays, Clock, Plus, Video, ExternalLink,
-  AlertCircle, CheckCircle2, XCircle, HourglassIcon,
+  CalendarDays, Clock, Video, ExternalLink,
+  CheckCircle2, XCircle, HourglassIcon, User,
+  DollarSign,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthStore } from "@/stores/authStore";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
 import { isAfter, parseISO, isBefore } from "date-fns";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -48,19 +47,19 @@ const STATUS_CONFIG = {
   },
 } as const;
 
-// ─── Booking card ─────────────────────────────────────────────────────────────
+// ─── Session card ─────────────────────────────────────────────────────────────
 
-function BookingCard({
-  booking,
+function SessionCard({
+  session,
   onCancel,
-  onPayNow,
+  onComplete,
 }: {
-  booking: AppointmentDto;
-  onCancel: (b: AppointmentDto) => void;
-  onPayNow: (b: AppointmentDto) => void;
+  session: AppointmentDto;
+  onCancel: (s: AppointmentDto) => void;
+  onComplete: (s: AppointmentDto) => void;
 }) {
-  const cfg = STATUS_CONFIG[booking.status as keyof typeof STATUS_CONFIG];
-  const initials = booking.specialistName
+  const cfg = STATUS_CONFIG[session.status as keyof typeof STATUS_CONFIG];
+  const initials = (session.studentName || "S")
     .split(" ")
     .map((n) => n[0])
     .join("")
@@ -70,13 +69,14 @@ function BookingCard({
     <Card className="overflow-hidden">
       <CardContent className="p-0">
         <div className="flex flex-col sm:flex-row gap-0">
+          {/* Left accent stripe */}
           <div
             className={`w-full sm:w-1.5 shrink-0 ${
-              booking.status === "Confirmed"
+              session.status === "Confirmed"
                 ? "bg-green-400"
-                : booking.status === "Pending"
+                : session.status === "Pending"
                 ? "bg-amber-400"
-                : booking.status === "Cancelled"
+                : session.status === "Cancelled"
                 ? "bg-red-300"
                 : "bg-blue-400"
             }`}
@@ -84,8 +84,9 @@ function BookingCard({
 
           <div className="flex-1 p-5">
             <div className="flex flex-col sm:flex-row gap-4">
+              {/* Student avatar */}
               <Avatar className="h-12 w-12 shrink-0">
-                <AvatarImage src={booking.specialistProfilePictureUrl ?? ""} />
+                <AvatarImage src={(session as any).studentProfilePictureUrl ?? ""} />
                 <AvatarFallback className="bg-primary/10 text-primary font-semibold">
                   {initials}
                 </AvatarFallback>
@@ -94,9 +95,10 @@ function BookingCard({
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2 flex-wrap">
                   <div>
-                    <p className="font-semibold">{booking.title}</p>
-                    <p className="text-sm text-muted-foreground">
-                      with {booking.specialistName}
+                    <p className="font-semibold">{session.title}</p>
+                    <p className="text-sm text-muted-foreground flex items-center gap-1">
+                      <User className="h-3.5 w-3.5" />
+                      {session.studentName || "Student"}
                     </p>
                   </div>
                   <Badge className={`flex items-center gap-1 text-xs ${cfg.className}`}>
@@ -107,28 +109,30 @@ function BookingCard({
                 <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                   <span className="flex items-center gap-1.5">
                     <CalendarDays className="h-3.5 w-3.5" />
-                    {booking.appointmentDate}
+                    {session.appointmentDate}
                   </span>
                   <span className="flex items-center gap-1.5">
                     <Clock className="h-3.5 w-3.5" />
-                    {booking.startTime} – {booking.endTime}
+                    {session.startTime} – {session.endTime}
                   </span>
-                  {booking.amountPaid != null && (
-                    <span className="text-primary font-medium">
-                      ${booking.amountPaid.toFixed(2)} paid
+                  {session.amountPaid != null && (
+                    <span className="flex items-center gap-1 text-primary font-medium">
+                      <DollarSign className="h-3.5 w-3.5" />
+                      {session.amountPaid.toFixed(2)} received
                     </span>
                   )}
                 </div>
 
-                {booking.description && (
-                  <p className="mt-2 text-xs text-muted-foreground line-clamp-1">
-                    {booking.description}
+                {session.description && (
+                  <p className="mt-2 text-xs text-muted-foreground line-clamp-2">
+                    {session.description}
                   </p>
                 )}
 
-                {booking.status === "Confirmed" && booking.googleMeetLink && (
+                {/* Google Meet link */}
+                {session.status === "Confirmed" && session.googleMeetLink && (
                   <a
-                    href={booking.googleMeetLink}
+                    href={session.googleMeetLink}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="mt-3 inline-flex items-center gap-2 rounded-md bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/20 transition-colors"
@@ -139,37 +143,37 @@ function BookingCard({
                   </a>
                 )}
 
-                {booking.status === "Pending" && (
-                  <div className="mt-3 flex items-center gap-3">
-                    <Button size="sm" onClick={() => onPayNow(booking)}>
-                      Complete Payment
-                    </Button>
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <AlertCircle className="h-3.5 w-3.5" />
-                      Slot held for 30 min from booking
-                    </span>
-                  </div>
-                )}
-
-                {booking.status === "Cancelled" && booking.cancellationReason && (
+                {/* Cancellation reason */}
+                {session.status === "Cancelled" && session.cancellationReason && (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Reason: {booking.cancellationReason}
+                    Reason: {session.cancellationReason}
                   </p>
                 )}
               </div>
 
-              {booking.canCancel && (
-                <div className="flex sm:flex-col items-center gap-2 shrink-0">
+              {/* Actions */}
+              <div className="flex sm:flex-col items-center gap-2 shrink-0">
+                {session.status === "Confirmed" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                    onClick={() => onComplete(session)}
+                  >
+                    Mark Complete
+                  </Button>
+                )}
+                {session.canCancel && (
                   <Button
                     size="sm"
                     variant="outline"
                     className="text-red-600 border-red-200 hover:bg-red-50"
-                    onClick={() => onCancel(booking)}
+                    onClick={() => onCancel(session)}
                   >
                     Cancel
                   </Button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -180,18 +184,18 @@ function BookingCard({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function StudentBookingsPage() {
+export default function SpecialistSessionsPage() {
   const { toast } = useToast();
   const { user } = useAuthStore();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [cancelTarget, setCancelTarget] = useState<AppointmentDto | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [completeTarget, setCompleteTarget] = useState<AppointmentDto | null>(null);
 
-  const { data: bookings = [], isLoading } = useQuery({
-    queryKey: ["student-bookings", user?.id],
-    queryFn: () => appointmentService.getMyAppointments(),
+  const { data: sessions = [], isLoading } = useQuery({
+    queryKey: ["specialist-sessions", user?.id],
+    queryFn: () => appointmentService.getMySessionsAsSpecialist(),
     enabled: !!user,
     refetchInterval: 30_000,
   });
@@ -200,60 +204,90 @@ export default function StudentBookingsPage() {
     mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
       appointmentService.cancelAppointment(id, reason),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["student-bookings"] });
-      toast({ title: "Booking Cancelled", description: "A refund has been issued if applicable." });
+      queryClient.invalidateQueries({ queryKey: ["specialist-sessions"] });
+      toast({ title: "Session Cancelled", description: "The student has been notified." });
       setCancelTarget(null);
       setCancelReason("");
     },
     onError: (err: any) => {
       toast({
         title: "Cannot cancel",
-        description: err.response?.data?.message ?? "Failed to cancel booking.",
+        description: err.response?.data?.message ?? "Failed to cancel session.",
         variant: "destructive",
       });
     },
   });
 
-  const upcoming = bookings.filter(
-    (b) =>
-      (b.status === "Pending" || b.status === "Confirmed") &&
-      isAfter(parseISO(`${b.appointmentDate}T${b.endTime}:00`), new Date())
+  const completeMutation = useMutation({
+    mutationFn: (id: string) => appointmentService.completeAppointment(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["specialist-sessions"] });
+      toast({ title: "Session marked as complete!" });
+      setCompleteTarget(null);
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Error",
+        description: err.response?.data?.message ?? "Failed to complete session.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const upcoming = sessions.filter(
+    (s) =>
+      (s.status === "Pending" || s.status === "Confirmed") &&
+      isAfter(parseISO(`${s.appointmentDate}T${s.endTime}:00`), new Date())
   );
 
-  const past = bookings.filter(
-    (b) =>
-      b.status === "Completed" ||
-      b.status === "Cancelled" ||
-      isBefore(parseISO(`${b.appointmentDate}T${b.endTime}:00`), new Date())
+  const past = sessions.filter(
+    (s) =>
+      s.status === "Completed" ||
+      s.status === "Cancelled" ||
+      isBefore(parseISO(`${s.appointmentDate}T${s.endTime}:00`), new Date())
   );
 
-  const handlePayNow = (booking: AppointmentDto) => {
-    navigate(`/bookings/${booking.id}/confirm`, {
-      state: {
-        specialistName: booking.specialistName,
-        appointmentDate: booking.appointmentDate,
-        startTime: booking.startTime,
-        endTime: booking.endTime,
-        title: booking.title,
-        hourlyRate: booking.hourlyRate,         // ← specialist's rate
-        holdExpiresAtUtc: booking.holdExpiresAtUtc, // ← real expiry time
-      },
-    });
-  };
+  const totalEarned = sessions
+    .filter((s) => s.status === "Confirmed" || s.status === "Completed")
+    .reduce((sum, s) => sum + (s.amountPaid ?? 0), 0);
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">My Bookings</h1>
-            <p className="text-muted-foreground">Your specialist session bookings</p>
+            <h1 className="text-2xl font-bold tracking-tight">My Sessions</h1>
+            <p className="text-muted-foreground">Sessions booked with you by students</p>
           </div>
-          <Button onClick={() => navigate("/specialists")} className="gap-2">
-            <Plus className="h-4 w-4" /> Book New Session
-          </Button>
+          {totalEarned > 0 && (
+            <div className="rounded-lg border bg-primary/5 px-4 py-2 text-right">
+              <p className="text-xs text-muted-foreground">Total Earned</p>
+              <p className="text-lg font-bold text-primary">${totalEarned.toFixed(2)}</p>
+            </div>
+          )}
         </div>
 
+        {/* Stats row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {(["Pending", "Confirmed", "Completed", "Cancelled"] as const).map((status) => {
+            const count = sessions.filter((s) => s.status === status).length;
+            const cfg = STATUS_CONFIG[status];
+            return (
+              <Card key={status}>
+                <CardContent className="p-4 flex items-center gap-3">
+                  <div className={`rounded-full p-2 ${cfg.className}`}>{cfg.icon}</div>
+                  <div>
+                    <p className="text-xl font-bold">{count}</p>
+                    <p className="text-xs text-muted-foreground">{cfg.label}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Tabs */}
         <Tabs defaultValue="upcoming" className="space-y-4">
           <TabsList>
             <TabsTrigger value="upcoming">Upcoming ({upcoming.length})</TabsTrigger>
@@ -264,19 +298,23 @@ export default function StudentBookingsPage() {
             {isLoading ? (
               <Card>
                 <CardContent className="p-8 text-center text-muted-foreground">
-                  Loading bookings…
+                  Loading sessions…
                 </CardContent>
               </Card>
             ) : upcoming.length === 0 ? (
               <Card>
-                <CardContent className="p-8 text-center space-y-4">
-                  <p className="text-muted-foreground">No upcoming bookings.</p>
-                  <Button onClick={() => navigate("/specialists")}>Find a Specialist</Button>
+                <CardContent className="p-8 text-center text-muted-foreground">
+                  No upcoming sessions yet.
                 </CardContent>
               </Card>
             ) : (
-              upcoming.map((b) => (
-                <BookingCard key={b.id} booking={b} onCancel={setCancelTarget} onPayNow={handlePayNow} />
+              upcoming.map((s) => (
+                <SessionCard
+                  key={s.id}
+                  session={s}
+                  onCancel={setCancelTarget}
+                  onComplete={setCompleteTarget}
+                />
               ))
             )}
           </TabsContent>
@@ -291,12 +329,17 @@ export default function StudentBookingsPage() {
             ) : past.length === 0 ? (
               <Card>
                 <CardContent className="p-8 text-center text-muted-foreground">
-                  No past bookings yet.
+                  No past sessions yet.
                 </CardContent>
               </Card>
             ) : (
-              past.map((b) => (
-                <BookingCard key={b.id} booking={b} onCancel={() => {}} onPayNow={() => {}} />
+              past.map((s) => (
+                <SessionCard
+                  key={s.id}
+                  session={s}
+                  onCancel={() => {}}
+                  onComplete={() => {}}
+                />
               ))
             )}
           </TabsContent>
@@ -307,30 +350,24 @@ export default function StudentBookingsPage() {
       <AlertDialog open={!!cancelTarget} onOpenChange={() => setCancelTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel Booking</AlertDialogTitle>
+            <AlertDialogTitle>Cancel Session</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to cancel{" "}
-              <strong>{cancelTarget?.title}</strong> on{" "}
+              <strong>{cancelTarget?.title}</strong> with{" "}
+              <strong>{cancelTarget?.studentName}</strong> on{" "}
               {cancelTarget?.appointmentDate} at {cancelTarget?.startTime}?
-              {cancelTarget?.amountPaid != null && (
-                <span className="block mt-1 text-green-700">
-                  A full refund of ${cancelTarget.amountPaid.toFixed(2)} will be issued.
-                </span>
-              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
-
           <div className="space-y-2 px-1">
             <Label htmlFor="cancel-reason">Reason (optional)</Label>
             <Textarea
               id="cancel-reason"
-              placeholder="Let the specialist know why you're cancelling…"
+              placeholder="Let the student know why you're cancelling…"
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
               rows={3}
             />
           </div>
-
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setCancelReason("")}>Keep</AlertDialogCancel>
             <AlertDialogAction
@@ -344,7 +381,30 @@ export default function StudentBookingsPage() {
                 }
               }}
             >
-              {cancelMutation.isPending ? "Cancelling…" : "Cancel Booking"}
+              {cancelMutation.isPending ? "Cancelling…" : "Cancel Session"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Complete dialog */}
+      <AlertDialog open={!!completeTarget} onOpenChange={() => setCompleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark Session as Complete</AlertDialogTitle>
+            <AlertDialogDescription>
+              Confirm that <strong>{completeTarget?.title}</strong> with{" "}
+              <strong>{completeTarget?.studentName}</strong> has been completed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Back</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (completeTarget) completeMutation.mutate(completeTarget.id);
+              }}
+            >
+              {completeMutation.isPending ? "Saving…" : "Confirm Complete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
