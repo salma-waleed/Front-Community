@@ -1,34 +1,34 @@
+// pages/BookSessionPage.tsx
+// Step 1 of 2 — pick a date/time and reserve the slot (status = Pending).
+// The user is then redirected to ConfirmBookingPage to pay.
+
 import { useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
-import {
-  ArrowLeft,
-  MapPin,
-  Clock,
-  CheckCircle,
-  CalendarDays,
-} from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ArrowLeft, MapPin, Clock, CalendarDays, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthStore } from "@/stores/authStore";
 import { useQuery } from "@tanstack/react-query";
 import { format, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { userService } from "@/services/userService";
-import { appointmentService } from "@/services/appointmentService"; // you'll need this
+import { appointmentService } from "@/services/appointmentService";
 
-const timeSlots = [
-  "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
-  "13:00", "13:30", "14:00", "14:30", "15:00", "15:30",
-  "16:00", "16:30",
-];
+const ALL_HALF_HOUR_SLOTS: string[] = Array.from({ length: 20 }, (_, i) => {
+  const totalMin = 8 * 60 + i * 30; // 08:00 – 17:30
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+});
 
 export default function BookSessionPage() {
   const { specialistId } = useParams<{ specialistId: string }>();
@@ -36,93 +36,97 @@ export default function BookSessionPage() {
   const { toast } = useToast();
   const { user } = useAuthStore();
 
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [isBooking, setIsBooking] = useState(false);
-  const [booked, setBooked] = useState(false);
 
-  // Fetch specialist public profile (includes availabilitySlots)
-  const { data: specialist } = useQuery({
+  // Specialist public profile (includes availabilitySlots)
+  const { data: specialist, isLoading: loadingSpecialist } = useQuery({
     queryKey: ["specialist-public-profile", specialistId],
     queryFn: () => userService.getPublicProfile(specialistId!),
     enabled: !!specialistId,
   });
 
-  // Fetch booked slots for selected date to check conflicts
-  const { data: bookedSlots = [] } = useQuery({
-    queryKey: ["specialist-booked-slots", specialistId, selectedDate],
-    queryFn: async () => {
-      if (!selectedDate || !specialistId) return [];
-      const slots = await appointmentService.getBookedSlots(
-        specialistId,
-        format(selectedDate, "yyyy-MM-dd")
-      );
-      return slots;
-    },
+  // Already-booked slots for the selected date
+  const { data: bookedSlots = [], isFetching: loadingSlots } = useQuery({
+    queryKey: ["booked-slots", specialistId, selectedDate],
+    queryFn: () =>
+      appointmentService.getBookedSlots(
+        specialistId!,
+        format(selectedDate!, "yyyy-MM-dd")
+      ),
     enabled: !!specialistId && !!selectedDate,
+    // Re-fetch every 30 s so a Pending hold released by another user shows up
+    refetchInterval: 30_000,
   });
 
   const availability = specialist?.availabilitySlots ?? [];
 
   const availableSlots = useMemo(() => {
     if (!selectedDate) return [];
-
-    const dayName = format(selectedDate, "EEEE"); // "Monday", "Tuesday", etc.
-    const daySlots = availability.filter((a) => a.day === dayName);
-
+    const dayName = format(selectedDate, "EEEE");
+    const daySlots = availability.filter((a: any) => a.day === dayName);
     if (daySlots.length === 0) return [];
 
-    return timeSlots.filter((slot) => {
+    return ALL_HALF_HOUR_SLOTS.filter((slot) => {
       if (bookedSlots.includes(slot)) return false;
-      return daySlots.some((a) => slot >= a.startTime && slot < a.endTime);
+      return daySlots.some(
+        (a: any) => slot >= a.startTime && slot < a.endTime
+      );
     });
   }, [selectedDate, availability, bookedSlots]);
 
-  const handleBook = async () => {
-    if (!selectedDate || !selectedSlot || !title) {
+  const endTime = useMemo(() => {
+    if (!selectedSlot) return "";
+    const [h, m] = selectedSlot.split(":").map(Number);
+    const totalMin = h * 60 + m + 30;
+    return `${String(Math.floor(totalMin / 60)).padStart(2, "0")}:${String(
+      totalMin % 60
+    ).padStart(2, "0")}`;
+  }, [selectedSlot]);
+
+  const handleReserve = async () => {
+    if (!selectedDate || !selectedSlot || !title.trim()) {
       toast({
-        title: "Missing fields",
+        title: "Missing details",
         description: "Please fill in all required fields.",
         variant: "destructive",
       });
       return;
     }
     if (!user) {
-      toast({
-        title: "Not logged in",
-        description: "Please log in to book a session.",
-        variant: "destructive",
-      });
+      toast({ title: "Not logged in", variant: "destructive" });
       return;
     }
 
     setIsBooking(true);
     try {
-      const [hours, minutes] = selectedSlot.split(":").map(Number);
-      const endHours = minutes === 30 ? hours + 1 : hours;
-      const endMinutes = minutes === 30 ? 0 : 30;
-      const endTime = `${String(endHours).padStart(2, "0")}:${String(endMinutes).padStart(2, "0")}`;
-
-      await appointmentService.bookSession({
+      const { id: appointmentId } = await appointmentService.bookSession({
         specialistId: specialistId!,
         appointmentDate: format(selectedDate, "yyyy-MM-dd"),
         startTime: selectedSlot,
         endTime,
-        title,
-        description: description || undefined,
+        title: title.trim(),
+        description: description.trim() || undefined,
       });
 
-      setBooked(true);
-      toast({
-        title: "Session Booked!",
-        description: "Your booking request has been sent to the specialist.",
+      // Redirect to payment — pass context via state
+      navigate(`/bookings/${appointmentId}/confirm`, {
+        state: {
+          specialistName: specialist?.fullName,
+          appointmentDate: format(selectedDate, "MMMM d, yyyy"),
+          startTime: selectedSlot,
+          endTime,
+          title: title.trim(),
+          hourlyRate: specialist?.hourlyRate,
+        },
       });
     } catch (err: any) {
       toast({
-        title: "Booking failed",
-        description: err.response?.data?.message || err.message,
+        title: "Could not reserve slot",
+        description: err.response?.data?.message ?? err.message,
         variant: "destructive",
       });
     } finally {
@@ -130,42 +134,12 @@ export default function BookSessionPage() {
     }
   };
 
-  const displayName = specialist?.fullName || "Specialist";
-  const initials = displayName
-    .split(" ")
-    .map((n: string) => n[0])
-    .join("");
-
-  if (booked) {
-    return (
-      <DashboardLayout>
-        <div className="mx-auto max-w-lg py-16 text-center space-y-6">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-green-100">
-            <CheckCircle className="h-10 w-10 text-green-600" />
-          </div>
-          <h1 className="text-2xl font-bold">Session Booked Successfully!</h1>
-          <p className="text-muted-foreground">
-            Your session with <strong>{displayName}</strong> on{" "}
-            <strong>{selectedDate && format(selectedDate, "MMMM d, yyyy")}</strong> at{" "}
-            <strong>{selectedSlot}</strong> has been requested. You'll be notified once confirmed.
-          </p>
-          <div className="flex justify-center gap-3">
-            <Button variant="outline" onClick={() => navigate("/specialists")}>
-              Browse More
-            </Button>
-            <Button onClick={() => navigate("/bookings")}>
-              View My Bookings
-            </Button>
-          </div>
-        </div>
-      </DashboardLayout>
-    );
-  }
+  const displayName = specialist?.fullName ?? "Specialist";
+  const initials = displayName.split(" ").map((n: string) => n[0]).join("").toUpperCase();
 
   return (
     <DashboardLayout>
       <div className="mx-auto max-w-4xl space-y-6">
-        {/* Back button */}
         <Button
           variant="ghost"
           onClick={() => navigate(`/profile/${specialistId}`)}
@@ -174,38 +148,53 @@ export default function BookSessionPage() {
           <ArrowLeft className="h-4 w-4" /> Back to Profile
         </Button>
 
-        {/* Specialist info */}
-        <Card>
-          <CardContent className="flex items-center gap-4 p-6">
-            <Avatar className="h-16 w-16">
-              <AvatarImage src={specialist?.profilePictureUrl || ""} />
-              <AvatarFallback className="bg-primary/10 text-primary text-lg font-semibold">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
-            <div>
-              <h2 className="text-xl font-semibold">{displayName}</h2>
-              {specialist?.professionalTitle && (
-                <p className="text-sm text-primary font-medium">
-                  {specialist.professionalTitle}
-                </p>
-              )}
-              {specialist?.country && (
-                <p className="text-sm text-muted-foreground flex items-center gap-1">
-                  <MapPin className="h-3 w-3" /> {specialist.country}
-                </p>
-              )}
-              {specialist?.hourlyRate != null && (
-                <p className="text-sm font-semibold text-primary mt-1">
-                  ${specialist.hourlyRate}/hr
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Progress indicator */}
+        <div className="flex items-center gap-3 text-sm">
+          <span className="flex items-center gap-1.5 font-semibold text-primary">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs">1</span>
+            Choose a slot
+          </span>
+          <span className="h-px flex-1 bg-border" />
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full border text-xs">2</span>
+            Confirm &amp; pay
+          </span>
+        </div>
+
+        {/* Specialist card */}
+        {loadingSpecialist ? (
+          <Card><CardContent className="p-6"><Skeleton className="h-16 w-full" /></CardContent></Card>
+        ) : (
+          <Card>
+            <CardContent className="flex items-center gap-4 p-6">
+              <Avatar className="h-16 w-16 flex-shrink-0">
+                <AvatarImage src={specialist?.profilePictureUrl ?? ""} />
+                <AvatarFallback className="bg-primary/10 text-primary text-lg font-semibold">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <h2 className="text-xl font-semibold">{displayName}</h2>
+                {specialist?.professionalTitle && (
+                  <p className="text-sm text-primary font-medium">{specialist.professionalTitle}</p>
+                )}
+                {specialist?.country && (
+                  <p className="text-sm text-muted-foreground flex items-center gap-1">
+                    <MapPin className="h-3 w-3" /> {specialist.country}
+                  </p>
+                )}
+                {specialist?.hourlyRate != null && (
+                  <Badge variant="secondary" className="mt-1">
+                    ${specialist.hourlyRate}/hr
+                  </Badge>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid gap-6 lg:grid-cols-2">
-          {/* Date picker */}
+          {/* Calendar */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -216,19 +205,18 @@ export default function BookSessionPage() {
               <Calendar
                 mode="single"
                 selected={selectedDate}
-                onSelect={(date) => {
-                  setSelectedDate(date);
+                onSelect={(d) => {
+                  setSelectedDate(d);
                   setSelectedSlot(null);
                 }}
-                disabled={(date) => date < startOfDay(new Date())}
-                className={cn("rounded-md border pointer-events-auto")}
+                disabled={(d) => d < startOfDay(new Date())}
+                className="rounded-md border"
               />
             </CardContent>
           </Card>
 
           {/* Time + details */}
           <div className="space-y-6">
-            {/* Time slots */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -245,10 +233,17 @@ export default function BookSessionPage() {
                   <p className="text-sm text-muted-foreground">
                     Please select a date to see available times.
                   </p>
+                ) : loadingSlots ? (
+                  <div className="grid grid-cols-3 gap-2">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <Skeleton key={i} className="h-9 w-full rounded-md" />
+                    ))}
+                  </div>
                 ) : availableSlots.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <AlertCircle className="h-4 w-4 shrink-0" />
                     No available slots on this day. Try another date.
-                  </p>
+                  </div>
                 ) : (
                   <div className="grid grid-cols-3 gap-2">
                     {availableSlots.map((slot) => (
@@ -257,7 +252,6 @@ export default function BookSessionPage() {
                         variant={selectedSlot === slot ? "default" : "outline"}
                         size="sm"
                         onClick={() => setSelectedSlot(slot)}
-                        className="text-sm"
                       >
                         {slot}
                       </Button>
@@ -267,7 +261,6 @@ export default function BookSessionPage() {
               </CardContent>
             </Card>
 
-            {/* Session details */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Session Details</CardTitle>
@@ -292,12 +285,25 @@ export default function BookSessionPage() {
                     onChange={(e) => setDescription(e.target.value)}
                   />
                 </div>
+
+                {selectedDate && selectedSlot && (
+                  <div className="rounded-lg bg-primary/5 border border-primary/20 p-3 text-sm space-y-1">
+                    <p className="font-medium text-primary">Slot summary</p>
+                    <p className="text-muted-foreground">
+                      {format(selectedDate, "MMMM d, yyyy")} · {selectedSlot} – {endTime}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      You'll have 30 minutes to complete payment after reserving.
+                    </p>
+                  </div>
+                )}
+
                 <Button
                   className="w-full"
-                  onClick={handleBook}
-                  disabled={!selectedDate || !selectedSlot || !title || isBooking}
+                  onClick={handleReserve}
+                  disabled={!selectedDate || !selectedSlot || !title.trim() || isBooking}
                 >
-                  {isBooking ? "Booking..." : "Confirm Booking"}
+                  {isBooking ? "Reserving slot..." : "Reserve & Continue to Payment →"}
                 </Button>
               </CardContent>
             </Card>

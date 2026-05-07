@@ -64,6 +64,7 @@ const specialistNavigation = [
   { name: "Group Chats",  href: "groups",       icon: Users },
   { name: "Calendar",      href: "/calendar",      icon: Home },
   { name: "My Courses",   href: "/specialist/my-courses",   icon: BookOpen },
+  { name: "My Bookings",      href: "/bookings",      icon: Home },
   { name: "My Feeds",      href: "/my-feeds",      icon: Home },
   { name: "Profile",     href: "/specialist/profile",   icon: User },
 ];
@@ -76,7 +77,7 @@ const parentNavigation = [
   { name: "Messages",    href: "/parent/messages",  icon: MessageSquare },
  { name: "Group Chats",  href: "/parent/groups",       icon: Users },
   { name: "Calendar",      href: "/parent/calendar",      icon: Home },
-  { name: "My Bookings",      href: "/parent/bookings",      icon: Home },
+  { name: "My Bookings",      href: "/bookings",      icon: Home },
   { name: "My Feeds",      href: "/parent/my-feeds",      icon: Home },
   { name: "Profile",     href: "/parent/profile",   icon: User },
 ];
