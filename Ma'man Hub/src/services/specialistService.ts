@@ -60,6 +60,41 @@ export interface SpecialistNotificationPreferences {
   weeklyEarningsSummary: boolean;
 }
 
+export interface SpecialistListItemDto {
+  id: string;
+  fullName: string;
+  profilePictureUrl?: string;
+  bio?: string;
+  country?: string;
+  professionalTitle?: string;
+  specializations: string[];
+  yearsOfExperience: number;
+  hourlyRate: number;
+  rating: number;
+  studentsHelped: number;
+  reviewsCount: number;
+}
+
+export interface PagedSpecialistsResult {
+  items: SpecialistListItemDto[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface GetSpecialistsParams {
+  search?: string;
+  specialization?: string;
+  minRate?: number;
+  maxRate?: number;
+  minRating?: number;
+  sortBy?: 'rating' | 'rate' | 'experience';
+  sortOrder?: 'asc' | 'desc';
+  page?: number;
+  pageSize?: number;
+}
+
 export const specialistService = {
 
   // Availability
@@ -89,5 +124,10 @@ export const specialistService = {
   updateSessionRates: async (data: UpdateSessionRatesDto): Promise<void> => {
     await api.put('/Specialist/rates', data);
   },
+
+  getSpecialists: async (params: GetSpecialistsParams = {}): Promise<PagedSpecialistsResult> => {
+  const response = await api.get('/Specialist', { params });
+  return response.data;
+},
 
 };

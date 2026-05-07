@@ -11,23 +11,18 @@ import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
 import {
   ArrowLeft,
-  Star,
   MapPin,
   Clock,
   CheckCircle,
   CalendarDays,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuthStore } from "@/stores/authStore";
 import { useQuery } from "@tanstack/react-query";
-import {
-  format,
-  addDays,
-  isSameDay,
-  startOfDay,
-} from "date-fns";
+import { format, startOfDay } from "date-fns";
 import { cn } from "@/lib/utils";
+import { userService } from "@/services/userService";
+import { appointmentService } from "@/services/appointmentService"; // you'll need this
 
 const timeSlots = [
   "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
@@ -48,86 +43,58 @@ export default function BookSessionPage() {
   const [isBooking, setIsBooking] = useState(false);
   const [booked, setBooked] = useState(false);
 
-  // Fetch specialist profile
+  // Fetch specialist public profile (includes availabilitySlots)
   const { data: specialist } = useQuery({
-    queryKey: ["specialist-profile", specialistId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("user_id", specialistId!)
-        .single();
-      if (error) throw error;
-      return data;
-    },
+    queryKey: ["specialist-public-profile", specialistId],
+    queryFn: () => userService.getPublicProfile(specialistId!),
     enabled: !!specialistId,
   });
 
-  // Fetch specialist availability
-  const { data: availability = [] } = useQuery({
-    queryKey: ["specialist-availability", specialistId],
+  // Fetch booked slots for selected date to check conflicts
+  const { data: bookedSlots = [] } = useQuery({
+    queryKey: ["specialist-booked-slots", specialistId, selectedDate],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("specialist_availability")
-        .select("*")
-        .eq("specialist_id", specialistId!)
-        .eq("is_available", true);
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!specialistId,
-  });
-
-  // Fetch existing appointments for the specialist to check conflicts
-  const { data: existingAppointments = [] } = useQuery({
-    queryKey: ["specialist-appointments", specialistId, selectedDate],
-    queryFn: async () => {
-      if (!selectedDate) return [];
-      const { data, error } = await supabase
-        .from("appointments")
-        .select("*")
-        .eq("specialist_id", specialistId!)
-        .eq("appointment_date", format(selectedDate, "yyyy-MM-dd"))
-        .neq("status", "cancelled");
-      if (error) throw error;
-      return data;
+      if (!selectedDate || !specialistId) return [];
+      const slots = await appointmentService.getBookedSlots(
+        specialistId,
+        format(selectedDate, "yyyy-MM-dd")
+      );
+      return slots;
     },
     enabled: !!specialistId && !!selectedDate,
   });
 
-  const bookedSlots = existingAppointments.map((a) => a.start_time.substring(0, 5));
+  const availability = specialist?.availabilitySlots ?? [];
 
   const availableSlots = useMemo(() => {
     if (!selectedDate) return [];
-    const dayOfWeek = selectedDate.getDay();
-    const dayAvailability = availability.filter((a) => a.day_of_week === dayOfWeek);
 
-    if (dayAvailability.length === 0 && availability.length > 0) {
-      return [];
-    }
+    const dayName = format(selectedDate, "EEEE"); // "Monday", "Tuesday", etc.
+    const daySlots = availability.filter((a) => a.day === dayName);
 
-    // If no availability data, show default slots
-    if (availability.length === 0) {
-      return timeSlots.filter((slot) => !bookedSlots.includes(slot));
-    }
+    if (daySlots.length === 0) return [];
 
     return timeSlots.filter((slot) => {
       if (bookedSlots.includes(slot)) return false;
-      return dayAvailability.some((a) => {
-        const start = a.start_time.substring(0, 5);
-        const end = a.end_time.substring(0, 5);
-        return slot >= start && slot < end;
-      });
+      return daySlots.some((a) => slot >= a.startTime && slot < a.endTime);
     });
   }, [selectedDate, availability, bookedSlots]);
 
   const handleBook = async () => {
     if (!selectedDate || !selectedSlot || !title) {
-      toast({ title: "Missing fields", description: "Please fill in all required fields.", variant: "destructive" });
+      toast({
+        title: "Missing fields",
+        description: "Please fill in all required fields.",
+        variant: "destructive",
+      });
       return;
     }
     if (!user) {
-      toast({ title: "Not logged in", description: "Please log in to book a session.", variant: "destructive" });
+      toast({
+        title: "Not logged in",
+        description: "Please log in to book a session.",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -138,29 +105,32 @@ export default function BookSessionPage() {
       const endMinutes = minutes === 30 ? 0 : 30;
       const endTime = `${String(endHours).padStart(2, "0")}:${String(endMinutes).padStart(2, "0")}`;
 
-      const { error } = await supabase.from("appointments").insert({
-        specialist_id: specialistId!,
-        student_id: user.id,
-        appointment_date: format(selectedDate, "yyyy-MM-dd"),
-        start_time: selectedSlot,
-        end_time: endTime,
+      await appointmentService.bookSession({
+        specialistId: specialistId!,
+        appointmentDate: format(selectedDate, "yyyy-MM-dd"),
+        startTime: selectedSlot,
+        endTime,
         title,
-        description: description || null,
-        status: "pending",
+        description: description || undefined,
       });
 
-      if (error) throw error;
-
       setBooked(true);
-      toast({ title: "Session Booked!", description: "Your booking request has been sent to the specialist." });
+      toast({
+        title: "Session Booked!",
+        description: "Your booking request has been sent to the specialist.",
+      });
     } catch (err: any) {
-      toast({ title: "Booking failed", description: err.message, variant: "destructive" });
+      toast({
+        title: "Booking failed",
+        description: err.response?.data?.message || err.message,
+        variant: "destructive",
+      });
     } finally {
       setIsBooking(false);
     }
   };
 
-  const displayName = specialist?.full_name || "Specialist";
+  const displayName = specialist?.fullName || "Specialist";
   const initials = displayName
     .split(" ")
     .map((n: string) => n[0])
@@ -196,29 +166,40 @@ export default function BookSessionPage() {
     <DashboardLayout>
       <div className="mx-auto max-w-4xl space-y-6">
         {/* Back button */}
-        <Button variant="ghost" onClick={() => navigate("/specialists")} className="gap-2">
-          <ArrowLeft className="h-4 w-4" /> Back to Specialists
+        <Button
+          variant="ghost"
+          onClick={() => navigate(`/profile/${specialistId}`)}
+          className="gap-2"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back to Profile
         </Button>
 
         {/* Specialist info */}
         <Card>
           <CardContent className="flex items-center gap-4 p-6">
             <Avatar className="h-16 w-16">
-              <AvatarImage src={specialist?.avatar_url || ""} />
+              <AvatarImage src={specialist?.profilePictureUrl || ""} />
               <AvatarFallback className="bg-primary/10 text-primary text-lg font-semibold">
                 {initials}
               </AvatarFallback>
             </Avatar>
             <div>
               <h2 className="text-xl font-semibold">{displayName}</h2>
-              {specialist?.location && (
-                <p className="text-sm text-muted-foreground flex items-center gap-1">
-                  <MapPin className="h-3 w-3" /> {specialist.location}
+              {specialist?.professionalTitle && (
+                <p className="text-sm text-primary font-medium">
+                  {specialist.professionalTitle}
                 </p>
               )}
-              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                {specialist?.bio || "Learning specialist available for booking."}
-              </p>
+              {specialist?.country && (
+                <p className="text-sm text-muted-foreground flex items-center gap-1">
+                  <MapPin className="h-3 w-3" /> {specialist.country}
+                </p>
+              )}
+              {specialist?.hourlyRate != null && (
+                <p className="text-sm font-semibold text-primary mt-1">
+                  ${specialist.hourlyRate}/hr
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -261,9 +242,13 @@ export default function BookSessionPage() {
               </CardHeader>
               <CardContent>
                 {!selectedDate ? (
-                  <p className="text-sm text-muted-foreground">Please select a date to see available times.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Please select a date to see available times.
+                  </p>
                 ) : availableSlots.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No available slots on this day. Try another date.</p>
+                  <p className="text-sm text-muted-foreground">
+                    No available slots on this day. Try another date.
+                  </p>
                 ) : (
                   <div className="grid grid-cols-3 gap-2">
                     {availableSlots.map((slot) => (

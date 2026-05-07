@@ -26,25 +26,25 @@ function getStoredUser(): StoredUser | null {
 }
 
 interface ProtectedRouteProps {
-  element: React.ReactElement;
+  element?: React.ReactElement;
+  children?: React.ReactNode;
   allowedRoles?: UserRole[];
 }
 
-const ProtectedRoute = ({ element, allowedRoles = [] }: ProtectedRouteProps) => {
+const ProtectedRoute = ({ element, children, allowedRoles = [] }: ProtectedRouteProps) => {
   const location = useLocation();
   const user = getStoredUser();
 
-  // 1. Not authenticated → go to login
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // 2. Role not permitted → show unauthorized page
   if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
     return <Navigate to="/unauthorized" state={{ from: location }} replace />;
   }
 
-  return element;
+  // Support both usage patterns
+  return <>{element ?? children}</>;
 };
 
 export default ProtectedRoute;
