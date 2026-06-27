@@ -1,100 +1,105 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   BookOpen, Trophy, Clock, Loader2, MapPin, Calendar, ArrowLeft,
   GraduationCap, Award, MessageSquare, Star, Users, Briefcase,
   ExternalLink, Link as LinkIcon, DollarSign, Video, Clock3,
-  Download, Eye, FileText, ImageIcon,
+  Download, Eye, FileText, ImageIcon, Globe, Lock,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { userService } from "@/services/userService";
 import { ShareProfileDialog } from "@/components/profile/ShareProfileDialog";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/stores/authStore";
+import { feedApi, type Post } from "../../services/feedService.ts";
+import { FollowButton } from "../../components/ui/FollowButton";
 
-// ── Interfaces ────────────────────────────────────────────────────────────────
-
+// ── Re-use all existing interfaces from original PublicProfilePage ─────────────
 interface SocialLinkDto { id: string; name: string; value: string; }
-
-interface CertificationPublicDto {
-  id: string;
-  name: string;
-  issuer: string;
-  year: string;
-  documentUrl?: string;
-}
-
-interface ExperienceDto {
-  id: string;
-  title: string;
-  place: string;
-  startDate: string;
-  endDate?: string;
-  isCurrentRole: boolean;
-}
-
-interface VisibleCourseDto {
-  id: string;
-  title: string;
-  thumbnail?: string;
-  studentsCount: number;
-  rating: number;
-  category: string;
-}
-
+interface CertificationPublicDto { id: string; name: string; issuer: string; year: string; documentUrl?: string; }
+interface ExperienceDto { id: string; title: string; place: string; startDate: string; endDate?: string; isCurrentRole: boolean; }
+interface VisibleCourseDto { id: string; title: string; thumbnail?: string; studentsCount: number; rating: number; category: string; }
 interface RecentAchievementDto { name: string; earnedDate: string; }
 interface EnrolledCourseDto { name: string; instructor: string; progress?: number; }
 interface AvailabilitySlotPublicDto { day: string; startTime: string; endTime: string; }
 
 interface PublicProfileDto {
-  id: string;
-  fullName: string;
-  profilePictureUrl?: string;
-  bio?: string;
-  country?: string;
-  role: string;
-  joinedDate: string;
+  id: string; fullName: string; profilePictureUrl?: string; bio?: string;
+  country?: string; role: string; joinedDate: string;
   socialLinks?: SocialLinkDto[];
-  // Student / Parent
-  enrolledCourses?: number;
-  achievements?: number;
-  totalHoursLearned?: number;
-  learningGoals?: string;
-  recentAchievements?: RecentAchievementDto[];
+  enrolledCourses?: number; achievements?: number; totalHoursLearned?: number;
+  learningGoals?: string; recentAchievements?: RecentAchievementDto[];
   enrolledCoursesList?: EnrolledCourseDto[];
-  // Creator
-  specializations?: string[];
-  totalCourses?: number;
-  totalStudents?: number;
-  averageRating?: number;
-  certifications?: CertificationPublicDto[];
-  experiences?: ExperienceDto[];
-  visibleCourses?: VisibleCourseDto[];
-  // Specialist
-  professionalTitle?: string;
-  yearsOfExperience?: number;
-  hourlyRate?: number;
-  rating?: number;
-  studentsHelped?: number;
+  specializations?: string[]; totalCourses?: number; totalStudents?: number;
+  averageRating?: number; certifications?: CertificationPublicDto[];
+  experiences?: ExperienceDto[]; visibleCourses?: VisibleCourseDto[];
+  professionalTitle?: string; yearsOfExperience?: number;
+  hourlyRate?: number; rating?: number; studentsHelped?: number;
   availabilitySlots?: AvailabilitySlotPublicDto[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-const DAYS_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const DAYS_ORDER = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
 const fadeUp = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 } };
-const fmt = (d?: string) =>
-  d ? new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "N/A";
-const fmtMonth = (d: string) =>
-  new Date(d).toLocaleDateString("en-US", { year: "numeric", month: "long" });
+const fmt = (d?: string) => d ? new Date(d).toLocaleDateString("en-US",{ year:"numeric",month:"long",day:"numeric"}) : "N/A";
+const fmtMonth = (d: string) => new Date(d).toLocaleDateString("en-US",{ year:"numeric",month:"long"});
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Follow stats bar ──────────────────────────────────────────────────────────
+function FollowStats({ followersCount, followingCount }: { followersCount: number; followingCount: number }) {
+  return (
+    <div className="flex items-center gap-6 justify-center">
+      <div className="text-center">
+        <p className="text-xl font-bold">{followersCount.toLocaleString()}</p>
+        <p className="text-xs text-muted-foreground">Followers</p>
+      </div>
+      <Separator orientation="vertical" className="h-8" />
+      <div className="text-center">
+        <p className="text-xl font-bold">{followingCount.toLocaleString()}</p>
+        <p className="text-xs text-muted-foreground">Following</p>
+      </div>
+    </div>
+  );
+}
 
+// ── Mini post card (profile posts tab) ───────────────────────────────────────
+function MiniPostCard({ post }: { post: Post }) {
+  return (
+    <div className="p-4 rounded-lg border hover:shadow-sm transition-shadow space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-muted-foreground">
+          {new Date(post.createdAt).toLocaleDateString("en-US",{ month:"short", day:"numeric", year:"numeric"})}
+        </span>
+        {post.visibility === "private" && (
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-0.5">
+            <Lock className="h-2.5 w-2.5" /> Only me
+          </Badge>
+        )}
+      </div>
+      <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap line-clamp-4">
+        {post.content}
+      </p>
+      {post.mediaUrls.length > 0 && (
+        post.mediaType === "video"
+          ? <video src={post.mediaUrls[0]} className="w-full max-h-48 rounded-md object-cover" />
+          : <img src={post.mediaUrls[0]} alt="" className="w-full max-h-48 rounded-md object-cover" />
+      )}
+      <div className="flex items-center gap-3 text-xs text-muted-foreground pt-1">
+        <span>{post.totalReactions} reactions</span>
+        <span>{post.commentsCount} comments</span>
+        <span>{post.sharesCount} shares</span>
+      </div>
+    </div>
+  );
+}
+
+// ── All existing sub-components kept intact ───────────────────────────────────
 function SocialLinksSection({ links }: { links?: SocialLinkDto[] }) {
   if (!links || links.length === 0) return null;
   return (
@@ -110,119 +115,58 @@ function SocialLinksSection({ links }: { links?: SocialLinkDto[] }) {
   );
 }
 
-// ── Certification viewer modal ────────────────────────────────────────────────
-
-function CertificationViewerModal({
-  cert,
-  open,
-  onClose,
-}: {
-  cert: CertificationPublicDto | null;
-  open: boolean;
-  onClose: () => void;
-}) {
+function CertificationViewerModal({ cert, open, onClose }: { cert: CertificationPublicDto | null; open: boolean; onClose: () => void }) {
   const { toast } = useToast();
   const [isDownloading, setIsDownloading] = useState(false);
-
   if (!cert) return null;
-
-  const isPdf =
-    cert.name?.toLowerCase().endsWith(".pdf") ||
-    cert.documentUrl?.toLowerCase().includes(".pdf");
-  const isImage =
-    !!cert.documentUrl && /\.(jpg|jpeg|png|webp|gif)$/i.test(cert.documentUrl);
-
+  const isImage = !!cert.documentUrl && /\.(jpg|jpeg|png|webp|gif)$/i.test(cert.documentUrl);
+  const isPdf   = cert.documentUrl?.toLowerCase().includes(".pdf");
   const handleDownload = async () => {
     setIsDownloading(true);
     try {
       const blob = await userService.downloadCertification(cert.id);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = cert.name || `${cert.name}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href = url; a.download = cert.name;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch {
-      toast({
-        title: "Download failed",
-        description: "Could not download the certificate. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsDownloading(false);
-    }
+    } catch { toast({ title:"Download failed", variant:"destructive" }); }
+    finally { setIsDownloading(false); }
   };
-
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl w-full max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
-        {/* Header */}
         <DialogHeader className="flex flex-row items-start justify-between px-6 py-4 border-b shrink-0">
           <div className="space-y-0.5 pr-8">
             <DialogTitle className="text-lg font-semibold">{cert.name}</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              {cert.issuer} · {cert.year}
-            </p>
+            <p className="text-sm text-muted-foreground">{cert.issuer} · {cert.year}</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {cert.documentUrl && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleDownload}
-                disabled={isDownloading}
-                className="gap-1.5"
-              >
-                {isDownloading
-                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  : <Download className="h-3.5 w-3.5" />}
-                Download
+              <Button size="sm" variant="outline" onClick={handleDownload} disabled={isDownloading} className="gap-1.5">
+                {isDownloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Download
               </Button>
             )}
             {cert.documentUrl && (
               <Button size="sm" variant="outline" asChild className="gap-1.5">
-                <a href={cert.documentUrl} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  Open
-                </a>
+                <a href={cert.documentUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3.5 w-3.5" />Open</a>
               </Button>
             )}
           </div>
         </DialogHeader>
-
-        {/* Viewer body */}
         <div className="flex-1 overflow-auto bg-muted/30 min-h-0">
           {cert.documentUrl && isImage && (
             <div className="flex items-center justify-center p-6 h-full">
-              <img
-                src={cert.documentUrl}
-                alt={cert.name}
-                className="max-w-full max-h-[65vh] object-contain rounded-lg shadow-lg"
-              />
+              <img src={cert.documentUrl} alt={cert.name} className="max-w-full max-h-[65vh] object-contain rounded-lg shadow-lg" />
             </div>
           )}
-
           {cert.documentUrl && isPdf && (
-            <iframe
-              src={`${cert.documentUrl}#toolbar=1&navpanes=0`}
-              className="w-full h-[65vh] border-0"
-              title={cert.name}
-            />
+            <iframe src={`${cert.documentUrl}#toolbar=1&navpanes=0`} className="w-full h-[65vh] border-0" title={cert.name} />
           )}
-
           {!cert.documentUrl && (
             <div className="flex flex-col items-center justify-center py-20 text-center gap-4">
-              <div className="p-4 bg-muted rounded-full">
-                <FileText className="h-10 w-10 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="font-medium">No file attached</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  This certification doesn't have a file uploaded yet.
-                </p>
-              </div>
+              <div className="p-4 bg-muted rounded-full"><FileText className="h-10 w-10 text-muted-foreground" /></div>
+              <div><p className="font-medium">No file attached</p><p className="text-sm text-muted-foreground mt-1">This certification doesn't have a file uploaded yet.</p></div>
             </div>
           )}
         </div>
@@ -231,116 +175,61 @@ function CertificationViewerModal({
   );
 }
 
-// ── Certifications section ────────────────────────────────────────────────────
-
-function CertificationsSection({
-  certifications,
-  delay,
-}: {
-  certifications?: CertificationPublicDto[];
-  delay: number;
-}) {
+function CertificationsSection({ certifications, delay }: { certifications?: CertificationPublicDto[]; delay: number }) {
   const [selected, setSelected] = useState<CertificationPublicDto | null>(null);
-
   if (!certifications || certifications.length === 0) return null;
-
   const getFileType = (cert: CertificationPublicDto) => {
-    if (!cert.documentUrl && !cert.name) return null;
     const name = cert.name || cert.documentUrl || "";
     if (/\.(jpg|jpeg|png|webp|gif)$/i.test(name)) return "image";
     if (/\.pdf$/i.test(name)) return "pdf";
     return "file";
   };
-
   return (
     <>
       <motion.div {...fadeUp} transition={{ duration: 0.5, delay }}>
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Award className="h-5 w-5" />
-              Certifications
-            </CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2"><Award className="h-5 w-5" />Certifications</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {certifications.map((cert) => {
               const fileType = getFileType(cert);
-              const hasFile = !!cert.documentUrl;
-
+              const hasFile  = !!cert.documentUrl;
               return (
-                <motion.div
-                  key={cert.id}
-                  whileHover={{ x: 2 }}
-                  className={cn(
-                    "group flex items-center gap-4 p-4 rounded-xl border transition-all duration-200",
-                    hasFile
-                      ? "cursor-pointer hover:border-primary/40 hover:shadow-sm hover:bg-muted/30"
-                      : "cursor-default"
-                  )}
-                  onClick={() => hasFile && setSelected(cert)}
-                >
-                  {/* Icon */}
-                  <div className={cn(
-                    "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors",
-                    hasFile ? "bg-primary/10 group-hover:bg-primary/15" : "bg-muted"
-                  )}>
-                    {fileType === "image"
-                      ? <ImageIcon className="h-5 w-5 text-primary" />
-                      : fileType === "pdf"
-                      ? <FileText className="h-5 w-5 text-primary" />
+                <motion.div key={cert.id} whileHover={{ x: 2 }}
+                  className={cn("group flex items-center gap-4 p-4 rounded-xl border transition-all duration-200",
+                    hasFile ? "cursor-pointer hover:border-primary/40 hover:shadow-sm hover:bg-muted/30" : "cursor-default")}
+                  onClick={() => hasFile && setSelected(cert)}>
+                  <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors",
+                    hasFile ? "bg-primary/10 group-hover:bg-primary/15" : "bg-muted")}>
+                    {fileType === "image" ? <ImageIcon className="h-5 w-5 text-primary" />
+                      : fileType === "pdf" ? <FileText className="h-5 w-5 text-primary" />
                       : <GraduationCap className="h-5 w-5 text-muted-foreground" />}
                   </div>
-
-                  {/* Info */}
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{cert.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {cert.issuer} · {cert.year}
-                    </p>
+                    <p className="text-sm text-muted-foreground">{cert.issuer} · {cert.year}</p>
                   </div>
-
-                  {/* Hover hint */}
-                  {hasFile && (
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                      <Badge variant="secondary" className="gap-1 text-xs">
-                        <Eye className="h-3 w-3" />
-                        View
-                      </Badge>
-                    </div>
-                  )}
-                  {!hasFile && (
-                    <Badge variant="outline" className="text-xs text-muted-foreground shrink-0">
-                      No file
-                    </Badge>
-                  )}
+                  {hasFile
+                    ? <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        <Badge variant="secondary" className="gap-1 text-xs"><Eye className="h-3 w-3" />View</Badge>
+                      </div>
+                    : <Badge variant="outline" className="text-xs text-muted-foreground shrink-0">No file</Badge>}
                 </motion.div>
               );
             })}
           </CardContent>
         </Card>
       </motion.div>
-
-      <CertificationViewerModal
-        cert={selected}
-        open={!!selected}
-        onClose={() => setSelected(null)}
-      />
+      <CertificationViewerModal cert={selected} open={!!selected} onClose={() => setSelected(null)} />
     </>
   );
 }
-
-// ── Experience section ────────────────────────────────────────────────────────
 
 function ExperienceSection({ experiences, delay }: { experiences?: ExperienceDto[]; delay: number }) {
   if (!experiences || experiences.length === 0) return null;
   return (
     <motion.div {...fadeUp} transition={{ duration: 0.5, delay }}>
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Briefcase className="h-5 w-5" />Experience
-          </CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Briefcase className="h-5 w-5" />Experience</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           {experiences.map(exp => (
             <div key={exp.id} className="p-4 rounded-lg border">
@@ -357,23 +246,13 @@ function ExperienceSection({ experiences, delay }: { experiences?: ExperienceDto
   );
 }
 
-// ── Availability section ──────────────────────────────────────────────────────
-
 function AvailabilitySection({ slots, delay }: { slots?: AvailabilitySlotPublicDto[]; delay: number }) {
   if (!slots || slots.length === 0) return null;
-
-  const byDay = DAYS_ORDER
-    .map(day => ({ day, slots: slots.filter(s => s.day === day) }))
-    .filter(d => d.slots.length > 0);
-
+  const byDay = DAYS_ORDER.map(day => ({ day, slots: slots.filter(s => s.day === day) })).filter(d => d.slots.length > 0);
   return (
     <motion.div {...fadeUp} transition={{ duration: 0.5, delay }}>
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock3 className="h-5 w-5" />Available Times
-          </CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Clock3 className="h-5 w-5" />Available Times</CardTitle></CardHeader>
         <CardContent>
           <div className="space-y-4">
             {byDay.map(({ day, slots }) => (
@@ -382,8 +261,7 @@ function AvailabilitySection({ slots, delay }: { slots?: AvailabilitySlotPublicD
                 <div className="flex flex-wrap gap-2">
                   {slots.map((slot, i) => (
                     <Badge key={i} variant="secondary" className="flex items-center gap-1 text-sm py-1 px-3">
-                      <Clock className="h-3.5 w-3.5" />
-                      {slot.startTime} — {slot.endTime}
+                      <Clock3 className="h-3.5 w-3.5" />{slot.startTime} — {slot.endTime}
                     </Badge>
                   ))}
                 </div>
@@ -398,26 +276,34 @@ function AvailabilitySection({ slots, delay }: { slots?: AvailabilitySlotPublicD
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
+type Tab = "about" | "posts";
+
 export default function PublicProfilePage() {
-  const { userId } = useParams<{ userId: string }>();
-  const navigate = useNavigate();
-  const { toast } = useToast();
-  const [profile, setProfile] = useState<PublicProfileDto | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { userId }  = useParams<{ userId: string }>();
+  const navigate    = useNavigate();
+  const { toast }   = useToast();
+  const { user: me } = useAuthStore();
+
+  const [profile, setProfile]             = useState<PublicProfileDto | null>(null);
+  const [isLoading, setIsLoading]         = useState(true);
+  const [tab, setTab]                     = useState<Tab>("about");
+  const [userPosts, setUserPosts]         = useState<Post[]>([]);
+  const [postsLoading, setPostsLoading]   = useState(false);
+  const [followStats, setFollowStats]     = useState({ followersCount: 0, followingCount: 0, isFollowedByViewer: false });
 
   useEffect(() => {
     if (!userId) { navigate("/"); return; }
     (async () => {
       try {
         setIsLoading(true);
-        const data = await userService.getPublicProfile(userId);
-        setProfile(data as PublicProfileDto);
+        const [profileData, stats] = await Promise.all([
+          userService.getPublicProfile(userId),
+          feedApi.getFollowStats(userId),
+        ]);
+        setProfile(profileData as PublicProfileDto);
+        setFollowStats(stats);
       } catch (error: any) {
-        toast({
-          title: "Error",
-          description: error.response?.data?.message || "Failed to load profile",
-          variant: "destructive",
-        });
+        toast({ title: "Error", description: error.response?.data?.message || "Failed to load profile", variant: "destructive" });
         navigate("/");
       } finally {
         setIsLoading(false);
@@ -425,24 +311,40 @@ export default function PublicProfilePage() {
     })();
   }, [userId]);
 
+  // Load posts when switching to Posts tab
+  useEffect(() => {
+    if (tab !== "posts" || !userId || userPosts.length > 0) return;
+    (async () => {
+      setPostsLoading(true);
+      try {
+        const posts = await feedApi.getUserPosts(userId);
+        setUserPosts(posts);
+      } catch {
+        toast({ title: "Failed to load posts", variant: "destructive" });
+      } finally {
+        setPostsLoading(false);
+      }
+    })();
+  }, [tab, userId]);
+
   const getInitials = () => {
     if (!profile?.fullName) return "U";
     const parts = profile.fullName.trim().split(" ");
     return parts.length >= 2 ? `${parts[0][0]}${parts[parts.length - 1][0]}` : parts[0][0];
   };
 
-  const role = profile?.role?.toLowerCase();
-  const isStudent = role === "student";
-  const isParent = role === "parent";
-  const isCreator = role === "contentcreator" || role === "creator";
+  const role        = profile?.role?.toLowerCase();
+  const isStudent   = role === "student";
+  const isParent    = role === "parent";
+  const isCreator   = role === "contentcreator" || role === "creator";
   const isSpecialist = role === "specialist";
+  const isSelf      = me?.id === userId;
 
   if (isLoading) return (
     <div className="min-h-screen bg-background flex items-center justify-center">
       <Loader2 className="h-8 w-8 animate-spin text-primary" />
     </div>
   );
-
   if (!profile) return (
     <div className="min-h-screen bg-background flex items-center justify-center">
       <p className="text-muted-foreground">Profile not found</p>
@@ -473,9 +375,9 @@ export default function PublicProfilePage() {
 
                 <div>
                   <h1 className="text-3xl font-bold">{profile.fullName}</h1>
-                {isSpecialist && profile.professionalTitle
-  ? <p className="text-muted-foreground mt-1 break-words max-w-xl">{profile.professionalTitle}</p>
-  : <p className="text-muted-foreground capitalize mt-1">{profile.role}</p>}
+                  {isSpecialist && profile.professionalTitle
+                    ? <p className="text-muted-foreground mt-1 break-words max-w-xl">{profile.professionalTitle}</p>
+                    : <p className="text-muted-foreground capitalize mt-1">{profile.role}</p>}
                 </div>
 
                 {profile.specializations && profile.specializations.length > 0 && (
@@ -487,27 +389,37 @@ export default function PublicProfilePage() {
                 {profile.bio && <p className="text-muted-foreground max-w-2xl">{profile.bio}</p>}
 
                 <div className="flex flex-wrap justify-center gap-2 pt-2">
-                  {profile.country && (
-                    <Badge variant="secondary"><MapPin className="mr-1 h-3 w-3" />{profile.country}</Badge>
-                  )}
-                  <Badge variant="secondary">
-                    <Calendar className="mr-1 h-3 w-3" />Joined {fmt(profile.joinedDate)}
-                  </Badge>
+                  {profile.country && <Badge variant="secondary"><MapPin className="mr-1 h-3 w-3" />{profile.country}</Badge>}
+                  <Badge variant="secondary"><Calendar className="mr-1 h-3 w-3" />Joined {fmt(profile.joinedDate)}</Badge>
                   {isSpecialist && profile.yearsOfExperience != null && (
-                    <Badge variant="secondary">
-                      <Briefcase className="mr-1 h-3 w-3" />{profile.yearsOfExperience} years exp.
-                    </Badge>
+                    <Badge variant="secondary"><Briefcase className="mr-1 h-3 w-3" />{profile.yearsOfExperience} years exp.</Badge>
                   )}
                   {isSpecialist && profile.hourlyRate != null && (
-                    <Badge variant="secondary">
-                      <DollarSign className="mr-1 h-3 w-3" />${profile.hourlyRate}/hr
-                    </Badge>
+                    <Badge variant="secondary"><DollarSign className="mr-1 h-3 w-3" />${profile.hourlyRate}/hr</Badge>
                   )}
                 </div>
 
                 <SocialLinksSection links={profile.socialLinks} />
 
-                <div className="flex gap-3 pt-2">
+                {/* ── Follow stats ── */}
+                <FollowStats
+                  followersCount={followStats.followersCount}
+                  followingCount={followStats.followingCount}
+                />
+
+                {/* ── Action buttons ── */}
+                <div className="flex gap-3 pt-2 flex-wrap justify-center">
+                  {!isSelf && (
+                    <FollowButton
+                      userId={profile.id}
+                      initialFollowing={followStats.isFollowedByViewer}
+                      size="default"
+                      variant="default"
+                      onToggle={(isFollowing, followersCount) =>
+                        setFollowStats((prev) => ({ ...prev, isFollowing, followersCount }))
+                      }
+                    />
+                  )}
                   <Button onClick={() => navigate(`/messages?userId=${userId}`)}>
                     <MessageSquare className="mr-2 h-4 w-4" />Send Message
                   </Button>
@@ -518,195 +430,205 @@ export default function PublicProfilePage() {
           </Card>
         </motion.div>
 
-        {/* ── SPECIALIST ── */}
-        {isSpecialist && (
-          <>
-            <motion.div {...fadeUp} transition={{ duration: 0.5, delay: 0.1 }} className="grid gap-4 sm:grid-cols-3">
-              {[
-                { icon: Star,     label: "Rating",           value: profile.rating?.toFixed(1) || "—", color: "text-yellow-500", bg: "bg-yellow-500/10" },
-                { icon: Users,    label: "Students Helped",  value: profile.studentsHelped || 0,        color: "text-primary",    bg: "bg-primary/10"    },
-                { icon: Briefcase,label: "Years Experience", value: profile.yearsOfExperience || 0,     color: "text-purple-500", bg: "bg-purple-500/10" },
-              ].map(({ icon: Icon, label, value, color, bg }) => (
-                <Card key={label}>
-                  <CardContent className="pt-6 flex items-center gap-4">
-                    <div className={`p-3 ${bg} rounded-lg`}><Icon className={`h-6 w-6 ${color}`} /></div>
-                    <div><p className="text-2xl font-bold">{value}</p><p className="text-sm text-muted-foreground">{label}</p></div>
-                  </CardContent>
-                </Card>
-              ))}
+        {/* ── Tabs ── */}
+        <div className="flex border-b">
+          {(["about", "posts"] as Tab[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-6 py-3 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
+                tab === t
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Posts tab ── */}
+        <AnimatePresence mode="wait">
+          {tab === "posts" && (
+            <motion.div key="posts" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              {postsLoading ? (
+                <div className="space-y-3">
+                  {[1,2,3].map(i => (
+                    <Card key={i} className="animate-pulse">
+                      <CardContent className="p-4 space-y-2">
+                        <div className="h-3 bg-muted rounded w-24" />
+                        <div className="h-3 bg-muted rounded w-full" />
+                        <div className="h-3 bg-muted rounded w-3/4" />
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : userPosts.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Globe className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">No public posts yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {userPosts.map((post) => <MiniPostCard key={post.id} post={post} />)}
+                </div>
+              )}
             </motion.div>
+          )}
 
-            <AvailabilitySection slots={profile.availabilitySlots} delay={0.15} />
-            <CertificationsSection certifications={profile.certifications} delay={0.2} />
-            <ExperienceSection experiences={profile.experiences} delay={0.3} />
-          </>
-        )}
+          {/* ── About tab ── */}
+          {tab === "about" && (
+            <motion.div key="about" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6">
 
-        {/* ── CREATOR ── */}
-        {isCreator && (
-          <>
-            <motion.div {...fadeUp} transition={{ duration: 0.5, delay: 0.1 }} className="grid gap-4 sm:grid-cols-3">
-              {[
-                { icon: Video, label: "Courses",    value: profile.totalCourses || 0,                      color: "text-primary",    bg: "bg-primary/10"    },
-                { icon: Users, label: "Students",   value: (profile.totalStudents || 0).toLocaleString(),  color: "text-blue-500",   bg: "bg-blue-500/10"   },
-                { icon: Star,  label: "Avg Rating", value: profile.averageRating?.toFixed(1) || "—",       color: "text-yellow-500", bg: "bg-yellow-500/10" },
-              ].map(({ icon: Icon, label, value, color, bg }) => (
-                <Card key={label}>
-                  <CardContent className="pt-6 flex items-center gap-4">
-                    <div className={`p-3 ${bg} rounded-lg`}><Icon className={`h-6 w-6 ${color}`} /></div>
-                    <div><p className="text-2xl font-bold">{value}</p><p className="text-sm text-muted-foreground">{label}</p></div>
-                  </CardContent>
-                </Card>
-              ))}
-            </motion.div>
+              {/* SPECIALIST */}
+              {isSpecialist && (
+                <>
+                  <motion.div {...fadeUp} transition={{ duration: 0.5, delay: 0.1 }} className="grid gap-4 sm:grid-cols-3">
+                    {[
+                      { icon: Star,      label: "Rating",           value: profile.rating?.toFixed(1) || "—", color: "text-yellow-500", bg: "bg-yellow-500/10" },
+                      { icon: Users,     label: "Students Helped",  value: profile.studentsHelped || 0,        color: "text-primary",    bg: "bg-primary/10"    },
+                      { icon: Briefcase, label: "Years Experience", value: profile.yearsOfExperience || 0,     color: "text-purple-500", bg: "bg-purple-500/10" },
+                    ].map(({ icon: Icon, label, value, color, bg }) => (
+                      <Card key={label}><CardContent className="pt-6 flex items-center gap-4">
+                        <div className={`p-3 ${bg} rounded-lg`}><Icon className={`h-6 w-6 ${color}`} /></div>
+                        <div><p className="text-2xl font-bold">{value}</p><p className="text-sm text-muted-foreground">{label}</p></div>
+                      </CardContent></Card>
+                    ))}
+                  </motion.div>
+                  <AvailabilitySection slots={profile.availabilitySlots} delay={0.15} />
+                  <CertificationsSection certifications={profile.certifications} delay={0.2} />
+                  <ExperienceSection experiences={profile.experiences} delay={0.3} />
+                </>
+              )}
 
-            <CertificationsSection certifications={profile.certifications} delay={0.2} />
-            <ExperienceSection experiences={profile.experiences} delay={0.25} />
-
-            {profile.visibleCourses && profile.visibleCourses.length > 0 && (
-              <motion.div {...fadeUp} transition={{ duration: 0.5, delay: 0.3 }}>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <BookOpen className="h-5 w-5" />Courses ({profile.visibleCourses.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {profile.visibleCourses.map((course, i) => (
-                        <motion.div
-                          key={course.id}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ duration: 0.3, delay: i * 0.05 }}
-                          className="flex items-center gap-4 p-4 rounded-lg border hover:shadow-md transition-shadow"
-                        >
-                          {course.thumbnail
-                            ? <img src={course.thumbnail} alt={course.title} className="h-14 w-20 rounded-md object-cover flex-shrink-0" />
-                            : <div className="h-14 w-20 rounded-md bg-muted flex items-center justify-center flex-shrink-0">
-                                <BookOpen className="h-6 w-6 text-muted-foreground" />
-                              </div>}
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate">{course.title}</p>
-                            <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-muted-foreground">
-                              <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" />{course.studentsCount.toLocaleString()}</span>
-                              <span className="flex items-center gap-1"><Star className="h-3.5 w-3.5 text-yellow-500" />{course.rating.toFixed(1)}</span>
-                              <Badge variant="outline" className="text-xs">{course.category}</Badge>
-                            </div>
+              {/* CREATOR */}
+              {isCreator && (
+                <>
+                  <motion.div {...fadeUp} transition={{ duration: 0.5, delay: 0.1 }} className="grid gap-4 sm:grid-cols-3">
+                    {[
+                      { icon: Video, label: "Courses",    value: profile.totalCourses || 0,                     color: "text-primary",    bg: "bg-primary/10"    },
+                      { icon: Users, label: "Students",   value: (profile.totalStudents || 0).toLocaleString(), color: "text-blue-500",   bg: "bg-blue-500/10"   },
+                      { icon: Star,  label: "Avg Rating", value: profile.averageRating?.toFixed(1) || "—",      color: "text-yellow-500", bg: "bg-yellow-500/10" },
+                    ].map(({ icon: Icon, label, value, color, bg }) => (
+                      <Card key={label}><CardContent className="pt-6 flex items-center gap-4">
+                        <div className={`p-3 ${bg} rounded-lg`}><Icon className={`h-6 w-6 ${color}`} /></div>
+                        <div><p className="text-2xl font-bold">{value}</p><p className="text-sm text-muted-foreground">{label}</p></div>
+                      </CardContent></Card>
+                    ))}
+                  </motion.div>
+                  <CertificationsSection certifications={profile.certifications} delay={0.2} />
+                  <ExperienceSection experiences={profile.experiences} delay={0.25} />
+                  {profile.visibleCourses && profile.visibleCourses.length > 0 && (
+                    <motion.div {...fadeUp} transition={{ duration: 0.5, delay: 0.3 }}>
+                      <Card>
+                        <CardHeader><CardTitle className="flex items-center gap-2"><BookOpen className="h-5 w-5" />Courses ({profile.visibleCourses.length})</CardTitle></CardHeader>
+                        <CardContent>
+                          <div className="space-y-3">
+                            {profile.visibleCourses.map((course, i) => (
+                              <motion.div key={course.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3, delay: i * 0.05 }}
+                                className="flex items-center gap-4 p-4 rounded-lg border hover:shadow-md transition-shadow">
+                                {course.thumbnail
+                                  ? <img src={course.thumbnail} alt={course.title} className="h-14 w-20 rounded-md object-cover flex-shrink-0" />
+                                  : <div className="h-14 w-20 rounded-md bg-muted flex items-center justify-center flex-shrink-0"><BookOpen className="h-6 w-6 text-muted-foreground" /></div>}
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium truncate">{course.title}</p>
+                                  <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-muted-foreground">
+                                    <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" />{course.studentsCount.toLocaleString()}</span>
+                                    <span className="flex items-center gap-1"><Star className="h-3.5 w-3.5 text-yellow-500" />{course.rating.toFixed(1)}</span>
+                                    <Badge variant="outline" className="text-xs">{course.category}</Badge>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            ))}
                           </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            )}
-          </>
-        )}
-
-        {/* ── STUDENT / PARENT ── */}
-        {(isStudent || isParent) && (
-          <>
-            <motion.div {...fadeUp} transition={{ duration: 0.5, delay: 0.1 }} className="grid gap-4 md:grid-cols-3">
-              {[
-                { icon: BookOpen, label: "Courses Enrolled", value: profile.enrolledCourses || 0,    color: "text-primary",    bg: "bg-primary/10"    },
-                { icon: Trophy,   label: "Achievements",     value: profile.achievements || 0,        color: "text-yellow-600", bg: "bg-yellow-500/10" },
-                { icon: Clock,    label: "Hours Learned",    value: profile.totalHoursLearned || 0,   color: "text-green-600",  bg: "bg-green-500/10"  },
-              ].map(({ icon: Icon, label, value, color, bg }) => (
-                <Card key={label}>
-                  <CardContent className="pt-6 flex items-center gap-4">
-                    <div className={`p-3 ${bg} rounded-lg`}><Icon className={`h-6 w-6 ${color}`} /></div>
-                    <div><p className="text-2xl font-bold">{value}</p><p className="text-sm text-muted-foreground">{label}</p></div>
-                  </CardContent>
-                </Card>
-              ))}
-            </motion.div>
-
-            <motion.div {...fadeUp} transition={{ duration: 0.5, delay: 0.2 }}>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Award className="h-5 w-5" />Achievements ({profile.recentAchievements?.length || 0})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {profile.recentAchievements && profile.recentAchievements.length > 0 ? (
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {profile.recentAchievements.map((a, i) => (
-                        <motion.div
-                          key={i}
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ duration: 0.3, delay: i * 0.05 }}
-                          className="flex items-center gap-3 p-4 rounded-lg border hover:shadow-md transition-shadow"
-                        >
-                          <div className="p-2 bg-yellow-500/10 rounded-full">
-                            <Trophy className="h-5 w-5 text-yellow-600" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate">{a.name}</p>
-                            <p className="text-xs text-muted-foreground">{fmt(a.earnedDate)}</p>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <Trophy className="h-12 w-12 text-muted-foreground/50 mb-3" />
-                      <p className="text-muted-foreground">No achievements yet</p>
-                    </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
                   )}
-                </CardContent>
-              </Card>
-            </motion.div>
+                </>
+              )}
 
-            <motion.div {...fadeUp} transition={{ duration: 0.5, delay: 0.3 }}>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <GraduationCap className="h-5 w-5" />Current Courses ({profile.enrolledCoursesList?.length || 0})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {profile.enrolledCoursesList && profile.enrolledCoursesList.length > 0 ? (
-                    <div className="space-y-3">
-                      {profile.enrolledCoursesList.map((course, i) => (
-                        <motion.div
-                          key={i}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ duration: 0.3, delay: i * 0.05 }}
-                          className="flex items-center justify-between p-4 rounded-lg border hover:shadow-md transition-shadow"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium">{course.name}</p>
-                            <p className="text-sm text-muted-foreground">{course.instructor}</p>
+              {/* STUDENT / PARENT */}
+              {(isStudent || isParent) && (
+                <>
+                  <motion.div {...fadeUp} transition={{ duration: 0.5, delay: 0.1 }} className="grid gap-4 md:grid-cols-3">
+                    {[
+                      { icon: BookOpen, label: "Courses Enrolled", value: profile.enrolledCourses || 0,  color: "text-primary",    bg: "bg-primary/10"    },
+                      { icon: Trophy,   label: "Achievements",     value: profile.achievements || 0,      color: "text-yellow-600", bg: "bg-yellow-500/10" },
+                      { icon: Clock,    label: "Hours Learned",    value: profile.totalHoursLearned || 0, color: "text-green-600",  bg: "bg-green-500/10"  },
+                    ].map(({ icon: Icon, label, value, color, bg }) => (
+                      <Card key={label}><CardContent className="pt-6 flex items-center gap-4">
+                        <div className={`p-3 ${bg} rounded-lg`}><Icon className={`h-6 w-6 ${color}`} /></div>
+                        <div><p className="text-2xl font-bold">{value}</p><p className="text-sm text-muted-foreground">{label}</p></div>
+                      </CardContent></Card>
+                    ))}
+                  </motion.div>
+
+                  <motion.div {...fadeUp} transition={{ duration: 0.5, delay: 0.2 }}>
+                    <Card>
+                      <CardHeader><CardTitle className="flex items-center gap-2"><Award className="h-5 w-5" />Achievements ({profile.recentAchievements?.length || 0})</CardTitle></CardHeader>
+                      <CardContent>
+                        {profile.recentAchievements && profile.recentAchievements.length > 0 ? (
+                          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            {profile.recentAchievements.map((a, i) => (
+                              <motion.div key={i} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3, delay: i * 0.05 }}
+                                className="flex items-center gap-3 p-4 rounded-lg border hover:shadow-md transition-shadow">
+                                <div className="p-2 bg-yellow-500/10 rounded-full"><Trophy className="h-5 w-5 text-yellow-600" /></div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium truncate">{a.name}</p>
+                                  <p className="text-xs text-muted-foreground">{fmt(a.earnedDate)}</p>
+                                </div>
+                              </motion.div>
+                            ))}
                           </div>
-                          {course.progress !== undefined && (
-                            <div className="flex items-center gap-2 ml-4">
-                              <div className="w-24 h-2 rounded-full bg-muted overflow-hidden">
-                                <div
-                                  className="h-full bg-primary rounded-full transition-all"
-                                  style={{ width: `${course.progress}%` }}
-                                />
-                              </div>
-                              <span className="text-sm font-medium w-10 text-right">{course.progress}%</span>
-                            </div>
-                          )}
-                        </motion.div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <BookOpen className="h-12 w-12 text-muted-foreground/50 mb-3" />
-                      <p className="text-muted-foreground">No courses enrolled yet</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center py-8 text-center">
+                            <Trophy className="h-12 w-12 text-muted-foreground/50 mb-3" />
+                            <p className="text-muted-foreground">No achievements yet</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+
+                  <motion.div {...fadeUp} transition={{ duration: 0.5, delay: 0.3 }}>
+                    <Card>
+                      <CardHeader><CardTitle className="flex items-center gap-2"><GraduationCap className="h-5 w-5" />Current Courses ({profile.enrolledCoursesList?.length || 0})</CardTitle></CardHeader>
+                      <CardContent>
+                        {profile.enrolledCoursesList && profile.enrolledCoursesList.length > 0 ? (
+                          <div className="space-y-3">
+                            {profile.enrolledCoursesList.map((course, i) => (
+                              <motion.div key={i} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3, delay: i * 0.05 }}
+                                className="flex items-center justify-between p-4 rounded-lg border hover:shadow-md transition-shadow">
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium">{course.name}</p>
+                                  <p className="text-sm text-muted-foreground">{course.instructor}</p>
+                                </div>
+                                {course.progress !== undefined && (
+                                  <div className="flex items-center gap-2 ml-4">
+                                    <div className="w-24 h-2 rounded-full bg-muted overflow-hidden">
+                                      <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${course.progress}%` }} />
+                                    </div>
+                                    <span className="text-sm font-medium w-10 text-right">{course.progress}%</span>
+                                  </div>
+                                )}
+                              </motion.div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center py-8 text-center">
+                            <BookOpen className="h-12 w-12 text-muted-foreground/50 mb-3" />
+                            <p className="text-muted-foreground">No courses enrolled yet</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                </>
+              )}
             </motion.div>
-          </>
-        )}
+          )}
+        </AnimatePresence>
 
         <div className="text-center text-sm text-muted-foreground pt-4">
           <p>This is a public profile on Ma'man</p>

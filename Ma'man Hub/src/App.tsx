@@ -19,6 +19,8 @@ import RegistrationPendingPage from "./pages/auth/RegistrationPendingPage";
 import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 import PublicProfilePage from "./pages/auth/PublicProfilePage.tsx";
 
+import LeaderboardPage from "./pages/LeaderboardPage.tsx";
+import FeedPage from "./pages/FeedPage.tsx";
 // Course Pages
 import CartPage from "./pages/courses/CartPage";
 import Categoriespage from "./pages/courses/Categoriespage";
@@ -47,10 +49,14 @@ import CreatorProfilePage from "./pages/creator/CreatorProfilePage";
 import GoLivePage from "./pages/creator/GoLivePage";
 import LiveSessionPage from "./pages/creator/LiveSessionPage";
 import UploadVideoPage from "./pages/creator/UploadVideoPage";
-
+import CreatorMyCoursesPage from "@/pages/creator/MyCoursesPage";
+import CourseDetailManagementPage from "@/pages/creator/CourseDetailManagementPage";
+import VideoReviewPage from "@/pages/creator/VideoReviewPage";
+import CreateCoursePage from "@/pages/creator/CreateCoursePage";
 // Messages Pages
-import MessagesPage from "./pages/messages/MessagesPage";
+import DirectMessagesPage from "./pages/messages/DirectMessagesPage.tsx";
 import GroupChatPage from "./pages/messages/GroupChatPage";
+import JoinGroupPage from "@/pages/messages/JoinGroupPage.tsx";
 
 // Parent
 import ParentDashboardPage from "./pages/parent/ParentDashboardPage";
@@ -163,6 +169,10 @@ const App = () => (
           />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/profile/:userId" element={<PublicProfilePage />} />
+          <Route path="/leaderboard" element={<LeaderboardPage />} />
+          <Route path="/feeds" element={<FeedPage />} />
+
+
 
           {/* ── Course Pages ───────────────────────────────────────────────── */}
           <Route
@@ -274,18 +284,23 @@ const App = () => (
             }
           />
 
+<Route path="/creator/my-courses" element={<CreatorMyCoursesPage />} />
+<Route path="/creator/courses/new" element={<CreateCoursePage />} />
+<Route path="/creator/courses/:courseId" element={<CourseDetailManagementPage />} />
+<Route path="/creator/video-review/:jobId" element={<VideoReviewPage />} />
+
           {/* ── Messages ──────────────────────────────────────────────────────── */}
           <Route
             path="/messages"
             element={
               <ProtectedRoute
                 allowedRoles={[...ALL_AUTHENTICATED]}
-                element={<MessagesPage />}
+                element={<DirectMessagesPage />}
               />
             }
           />
           <Route
-            path="/groups"
+            path="/messages/groups"
             element={
               <ProtectedRoute
                 allowedRoles={[...ALL_AUTHENTICATED]}
@@ -294,6 +309,7 @@ const App = () => (
             }
           />
 
+<Route path="/join/:code" element={<JoinGroupPage />} />
           {/* ── Parent ───────────────────────────────────────────────────────── */}
           <Route
             path="/parent/dashboard"

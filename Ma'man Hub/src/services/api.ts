@@ -14,6 +14,10 @@ const api = axios.create({
 // Request interceptor - Add token to every request
 api.interceptors.request.use(
   (config) => {
+    if (config.data instanceof FormData) {
+      delete config.headers["Content-Type"];
+    }
+    
     if (import.meta.env.DEV) {
       console.log("API Request:", {
         method: config.method?.toUpperCase(),
